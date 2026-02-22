@@ -1,88 +1,136 @@
 #!/usr/bin/env python3
-"""Test 2048 game across multiple seeds and report statistics."""
+"""Benchmark 2048 agents across multiple seeds and report statistics."""
+
+import argparse
+import json
+from datetime import datetime
+from typing import Optional
 
 from game2048.game import Game2048
-from game2048.agents import RandomAgent
+from game2048.agents import RandomAgent, RightLeftAgent, RightDownAgent, BaseAgent
+from game2048.runner import GameRunner
 
 
-def run_game(seed: int) -> dict:
-    """Run a single game with given seed and return results."""
+def run_game(agent: BaseAgent, seed: int) -> dict:
+    """Run a single game with given agent and seed, return results."""
     game = Game2048(seed=seed)
-    agent = RandomAgent(seed=seed)
-
-    moves = 0
-    while not game.game_over:
-        move = agent.choose_move(game)
-        if move is None:
-            break
-        game.move(move)
-        moves += 1
-
+    runner = GameRunner(game, agent.choose_move)
+    runner.run()
+    results = runner.get_results()
     return {
         "seed": seed,
-        "score": game.score,
-        "max_tile": game.get_max_tile(),
-        "moves": moves,
+        "score": results["score"],
+        "max_tile": results["max_tile"],
+        "moves": results["moves"],
     }
 
 
-def main():
+def benchmark_agent(
+    agent: BaseAgent, seeds: range, verbose: bool = False
+) -> list[dict]:
+    """Run benchmark for a single agent across all seeds."""
     results = []
-
-    print("Testing 2048 game with seeds 1-50...")
-    print("=" * 60)
-
-    for seed in range(1, 51):
-        result = run_game(seed)
+    for seed in seeds:
+        result = run_game(agent, seed)
         results.append(result)
-        print(
-            f"Seed {seed:2d}: Score={result['score']:5d}, Max={result['max_tile']:4d}, Moves={result['moves']:3d}"
-        )
+        if verbose:
+            print(
+                f"  Seed {seed:2d}: Score={result['score']:5d}, Max={result['max_tile']:4d}, Moves={result['moves']:3d}"
+            )
+    return results
 
-    print("=" * 60)
 
+def compute_summary(results: list[dict]) -> dict:
+    """Compute summary statistics for a set of results."""
     scores = [r["score"] for r in results]
     max_tiles = [r["max_tile"] for r in results]
-    moves = [r["moves"] for r in results]
+    return {
+        "avg_score": round(sum(scores) / len(scores), 1),
+        "max_score": max(scores),
+        "min_score": min(scores),
+        "avg_max_tile": round(sum(max_tiles) / len(max_tiles), 1),
+    }
 
-    print("\n📊 STATISTICS")
+
+def print_summary(name: str, results: list[dict]) -> None:
+    """Print summary statistics for an agent."""
+    summary = compute_summary(results)
+    print(f"\n{name.upper()}")
     print("-" * 40)
-    print(
-        f"Score:     Avg={sum(scores) / len(scores):.1f}, Min={min(scores)}, Max={max(scores)}"
-    )
-    print(
-        f"Max Tile:  Avg={sum(max_tiles) / len(max_tiles):.1f}, Min={min(max_tiles)}, Max={max(max_tiles)}"
-    )
-    print(
-        f"Moves:     Avg={sum(moves) / len(moves):.1f}, Min={min(moves)}, Max={max(moves)}"
-    )
+    print(f"  Avg Score:  {summary['avg_score']:.1f}")
+    print(f"  Max Score:  {summary['max_score']}")
+    print(f"  Min Score:  {summary['min_score']}")
+    print(f"  Avg Tile:   {summary['avg_max_tile']:.1f}")
 
-    print("\n🎯 MAX TILE DISTRIBUTION")
-    print("-" * 40)
-    from collections import Counter
 
-    tile_counts = Counter(max_tiles)
-    for tile in sorted(tile_counts.keys()):
-        count = tile_counts[tile]
-        pct = count / len(results) * 100
-        bar = "█" * int(pct / 2)
-        print(f"{tile:4d}: {count:2d} games ({pct:5.1f}%) {bar}")
-
-    print("\n🏆 TOP 5 SCORES")
-    print("-" * 40)
-    top5 = sorted(results, key=lambda x: x["score"], reverse=True)[:5]
-    for i, r in enumerate(top5, 1):
+def print_comparison(all_results: dict[str, list[dict]]) -> None:
+    """Print comparison table of all agents."""
+    print("\n" + "=" * 60)
+    print("COMPARISON")
+    print("=" * 60)
+    print(f"{'Agent':<12} {'Avg Score':>10} {'Max Score':>10} {'Avg Tile':>10}")
+    print("-" * 60)
+    for name, results in all_results.items():
+        summary = compute_summary(results)
         print(
-            f"{i}. Seed {r['seed']:2d}: Score={r['score']}, Max={r['max_tile']}, Moves={r['moves']}"
+            f"{name:<12} {summary['avg_score']:>10.1f} {summary['max_score']:>10} {summary['avg_max_tile']:>10.1f}"
         )
 
-    print("\n💩 BOTTOM 5 SCORES")
-    print("-" * 40)
-    bottom5 = sorted(results, key=lambda x: x["score"])[:5]
-    for i, r in enumerate(bottom5, 1):
-        print(
-            f"{i}. Seed {r['seed']:2d}: Score={r['score']}, Max={r['max_tile']}, Moves={r['moves']}"
-        )
+
+def main():
+    parser = argparse.ArgumentParser(description="Benchmark 2048 agents")
+    parser.add_argument("--json", action="store_true", help="Output results as JSON")
+    parser.add_argument(
+        "--output", "-o", type=str, default=None, help="Output file for JSON results"
+    )
+    parser.add_argument(
+        "--seeds", type=int, default=50, help="Number of seeds to test (default: 50)"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Print per-seed results"
+    )
+    args = parser.parse_args()
+
+    seeds = range(1, args.seeds + 1)
+
+    agents = {
+        "random": RandomAgent(seed=42),
+        "rightleft": RightLeftAgent(),
+        "rightdown": RightDownAgent(),
+    }
+
+    all_results: dict[str, list[dict]] = {}
+
+    if not args.json:
+        print(f"Benchmarking 2048 agents with seeds 1-{args.seeds}...")
+        print("=" * 60)
+
+    for name, agent in agents.items():
+        if not args.json:
+            print(f"\nRunning {name} agent...")
+        results = benchmark_agent(agent, seeds, verbose=args.verbose and not args.json)
+        all_results[name] = results
+
+    if args.json:
+        output_data = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "agents": all_results,
+            "summary": {
+                name: compute_summary(results) for name, results in all_results.items()
+            },
+        }
+
+        if args.output:
+            with open(args.output, "w") as f:
+                json.dump(output_data, f, indent=2)
+            if not args.json or args.verbose:
+                print(f"Results written to {args.output}")
+        else:
+            print(json.dumps(output_data, indent=2))
+    else:
+        for name, results in all_results.items():
+            print_summary(name, results)
+        print_comparison(all_results)
 
 
 if __name__ == "__main__":

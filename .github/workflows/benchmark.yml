@@ -16,6 +16,7 @@ on:
       - 'benchmark.py'
       - 'pyproject.toml'
       - '.github/workflows/benchmark.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write

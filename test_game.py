@@ -7,6 +7,7 @@ from game2048.agents import (
     CornerAgent,
     GreedyAgent,
     SnakeAgent,
+    ExpectimaxAgent,
 )
 
 
@@ -236,6 +237,45 @@ class TestSnakeAgent(unittest.TestCase):
     def test_play_game(self):
         game = Game2048(seed=42)
         agent = SnakeAgent()
+        final_score = agent.play_game(game)
+        self.assertTrue(game.game_over)
+        self.assertIsInstance(final_score, int)
+        self.assertGreater(final_score, 0)
+
+
+class TestExpectimaxAgent(unittest.TestCase):
+    def test_agent_returns_valid_move(self):
+        game = Game2048(seed=42)
+        agent = ExpectimaxAgent(depth=2)
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_agent_returns_none_when_no_moves(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        game.game_over = False
+        agent = ExpectimaxAgent(depth=2)
+        move = agent.choose_move(game)
+        self.assertIsNone(move)
+
+    def test_agent_with_different_depths(self):
+        game = Game2048(seed=42)
+        agent_depth1 = ExpectimaxAgent(depth=1)
+        agent_depth2 = ExpectimaxAgent(depth=2)
+        move1 = agent_depth1.choose_move(game)
+        move2 = agent_depth2.choose_move(game)
+        self.assertIn(move1, Game2048.MOVES)
+        self.assertIn(move2, Game2048.MOVES)
+
+    def test_evaluate_returns_float(self):
+        game = Game2048(seed=42)
+        agent = ExpectimaxAgent(depth=2)
+        value = agent.evaluate(game)
+        self.assertIsInstance(value, float)
+
+    def test_play_game(self):
+        game = Game2048(seed=42)
+        agent = ExpectimaxAgent(depth=2)
         final_score = agent.play_game(game)
         self.assertTrue(game.game_over)
         self.assertIsInstance(final_score, int)

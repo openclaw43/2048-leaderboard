@@ -7,7 +7,13 @@ from datetime import datetime
 from typing import Optional
 
 from game2048.game import Game2048
-from game2048.agents import RandomAgent, RightLeftAgent, RightDownAgent, BaseAgent
+from game2048.agents import (
+    RandomAgent,
+    RightLeftAgent,
+    RightDownAgent,
+    CornerAgent,
+    BaseAgent,
+)
 from game2048.runner import GameRunner
 
 
@@ -97,6 +103,7 @@ def main():
         "random": RandomAgent(seed=42),
         "rightleft": RightLeftAgent(),
         "rightdown": RightDownAgent(),
+        "corner": CornerAgent(),
     }
 
     all_results: dict[str, list[dict]] = {}

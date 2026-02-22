@@ -1,6 +1,12 @@
 import unittest
 from game2048.game import Game2048
-from game2048.agents import RandomAgent, RightLeftAgent, RightDownAgent, CornerAgent
+from game2048.agents import (
+    RandomAgent,
+    RightLeftAgent,
+    RightDownAgent,
+    CornerAgent,
+    GreedyAgent,
+)
 
 
 class TestGame2048(unittest.TestCase):
@@ -154,6 +160,49 @@ class TestCornerAgent(unittest.TestCase):
     def test_play_game(self):
         game = Game2048(seed=42)
         agent = CornerAgent()
+        final_score = agent.play_game(game)
+        self.assertTrue(game.game_over)
+        self.assertIsInstance(final_score, int)
+        self.assertGreater(final_score, 0)
+
+
+class TestGreedyAgent(unittest.TestCase):
+    def test_agent_prefers_merge_moves(self):
+        # Grid where left/right gives higher score than up/down
+        game = Game2048(seed=42)
+        game.grid = [[2, 2, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        game.game_over = False
+        agent = GreedyAgent()
+        move = agent.choose_move(game)
+        # Left or right should be preferred (merges the 2s for 4 points)
+        # vs up/down which just moves the tile
+        self.assertIn(move, ["left", "right"])
+
+    def test_agent_uses_tie_breaker(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        game.game_over = False
+        agent = GreedyAgent()
+        move = agent.choose_move(game)
+        self.assertEqual(move, "down")
+
+    def test_agent_returns_valid_move(self):
+        game = Game2048(seed=42)
+        agent = GreedyAgent()
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_agent_returns_none_when_no_moves(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        game.game_over = False
+        agent = GreedyAgent()
+        move = agent.choose_move(game)
+        self.assertIsNone(move)
+
+    def test_play_game(self):
+        game = Game2048(seed=42)
+        agent = GreedyAgent()
         final_score = agent.play_game(game)
         self.assertTrue(game.game_over)
         self.assertIsInstance(final_score, int)

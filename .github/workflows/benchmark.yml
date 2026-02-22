@@ -3,7 +3,7 @@ name: Benchmark
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'game2048/**/*.py'
       - 'benchmark.py'
@@ -36,7 +36,7 @@ jobs:
       - name: Detect changed agents
         id: detect
         run: |
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/master" ]]; then
             echo "agents=all" >> $GITHUB_OUTPUT
             echo "cache_key=" >> $GITHUB_OUTPUT
           else
@@ -190,8 +190,8 @@ jobs:
             gh pr comment ${{ github.event.pull_request.number }} --body-file pr_comment.md
           fi
       
-      - name: Commit results to main
-        if: github.ref == 'refs/heads/main'
+      - name: Commit results to master
+        if: github.ref == 'refs/heads/master'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

@@ -144,6 +144,15 @@ class Game2048:
     def get_max_tile(self) -> int:
         return max(max(row) for row in self.grid)
 
+    def clone(self) -> "Game2048":
+        new_game = Game2048.__new__(Game2048)
+        new_game.rng = random.Random()
+        new_game.rng.setstate(self.rng.getstate())
+        new_game.grid = [row[:] for row in self.grid]
+        new_game.score = self.score
+        new_game.game_over = self.game_over
+        return new_game
+
     def __str__(self) -> str:
         result = f"Score: {self.score}\n"
         for row in self.grid:

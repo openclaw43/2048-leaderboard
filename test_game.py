@@ -6,6 +6,7 @@ from game2048.agents import (
     RightDownAgent,
     CornerAgent,
     GreedyAgent,
+    SnakeAgent,
 )
 
 
@@ -203,6 +204,38 @@ class TestGreedyAgent(unittest.TestCase):
     def test_play_game(self):
         game = Game2048(seed=42)
         agent = GreedyAgent()
+        final_score = agent.play_game(game)
+        self.assertTrue(game.game_over)
+        self.assertIsInstance(final_score, int)
+        self.assertGreater(final_score, 0)
+
+
+class TestSnakeAgent(unittest.TestCase):
+    def test_agent_returns_valid_move(self):
+        game = Game2048(seed=42)
+        agent = SnakeAgent()
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_agent_returns_none_when_no_moves(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        game.game_over = False
+        agent = SnakeAgent()
+        move = agent.choose_move(game)
+        self.assertIsNone(move)
+
+    def test_agent_prefers_monotonic_pattern(self):
+        game = Game2048(seed=42)
+        game.grid = [[64, 32, 16, 8], [2, 4, 8, 16], [0, 0, 0, 0], [0, 0, 0, 0]]
+        game.game_over = False
+        agent = SnakeAgent()
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_play_game(self):
+        game = Game2048(seed=42)
+        agent = SnakeAgent()
         final_score = agent.play_game(game)
         self.assertTrue(game.game_over)
         self.assertIsInstance(final_score, int)

@@ -6,6 +6,7 @@ from game2048.agents import (
     RightDownAgent,
     CornerAgent,
     GreedyAgent,
+    HeuristicAgent,
 )
 
 
@@ -203,6 +204,98 @@ class TestGreedyAgent(unittest.TestCase):
     def test_play_game(self):
         game = Game2048(seed=42)
         agent = GreedyAgent()
+        final_score = agent.play_game(game)
+        self.assertTrue(game.game_over)
+        self.assertIsInstance(final_score, int)
+        self.assertGreater(final_score, 0)
+
+
+class TestHeuristicAgent(unittest.TestCase):
+    def test_agent_with_default_weights(self):
+        game = Game2048(seed=42)
+        agent = HeuristicAgent()
+        self.assertIsNotNone(agent.weights)
+        self.assertIn("empty", agent.weights)
+        self.assertIn("mono", agent.weights)
+        self.assertIn("max", agent.weights)
+        self.assertIn("corner", agent.weights)
+        self.assertIn("smooth", agent.weights)
+
+    def test_agent_with_custom_weights(self):
+        custom_weights = {
+            "empty": 5.0,
+            "mono": 2.0,
+            "max": 1.5,
+            "corner": 3.0,
+            "smooth": 0.5,
+        }
+        agent = HeuristicAgent(weights=custom_weights)
+        self.assertEqual(agent.weights["empty"], 5.0)
+        self.assertEqual(agent.weights["mono"], 2.0)
+
+    def test_agent_returns_valid_move(self):
+        game = Game2048(seed=42)
+        agent = HeuristicAgent()
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_agent_returns_none_when_no_moves(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        game.game_over = False
+        agent = HeuristicAgent()
+        move = agent.choose_move(game)
+        self.assertIsNone(move)
+
+    def test_evaluate_returns_float(self):
+        game = Game2048(seed=42)
+        agent = HeuristicAgent()
+        score = agent.evaluate(game)
+        self.assertIsInstance(score, float)
+
+    def test_empty_count_heuristic(self):
+        game = Game2048(seed=42)
+        agent = HeuristicAgent()
+        empty_count = agent._count_empty(game)
+        self.assertGreaterEqual(empty_count, 0)
+        self.assertLessEqual(empty_count, 16)
+
+    def test_monotonicity_heuristic(self):
+        game = Game2048(seed=42)
+        agent = HeuristicAgent()
+        mono = agent._monotonicity(game)
+        self.assertIsInstance(mono, float)
+
+    def test_max_tile_heuristic(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 4, 8, 16], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        agent = HeuristicAgent()
+        max_val = agent._max_tile_value(game)
+        self.assertEqual(max_val, 4.0)
+
+    def test_corner_bonus_heuristic(self):
+        game = Game2048(seed=42)
+        game.grid = [[1024, 2, 4, 8], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        agent = HeuristicAgent()
+        corner_bonus = agent._corner_bonus(game)
+        self.assertEqual(corner_bonus, 10.0)
+
+    def test_corner_bonus_no_max_in_corner(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 2, 4, 1024], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        agent = HeuristicAgent()
+        corner_bonus = agent._corner_bonus(game)
+        self.assertEqual(corner_bonus, 10.0)
+
+    def test_smoothness_heuristic(self):
+        game = Game2048(seed=42)
+        agent = HeuristicAgent()
+        smoothness = agent._smoothness(game)
+        self.assertIsInstance(smoothness, float)
+
+    def test_play_game(self):
+        game = Game2048(seed=42)
+        agent = HeuristicAgent()
         final_score = agent.play_game(game)
         self.assertTrue(game.game_over)
         self.assertIsInstance(final_score, int)

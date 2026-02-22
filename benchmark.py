@@ -13,6 +13,7 @@ from game2048.agents import (
     RightDownAgent,
     CornerAgent,
     GreedyAgent,
+    HeuristicAgent,
     BaseAgent,
 )
 from game2048.runner import GameRunner
@@ -106,6 +107,7 @@ def main():
         "rightdown": RightDownAgent(),
         "corner": CornerAgent(),
         "greedy": GreedyAgent(),
+        "heuristic": HeuristicAgent(),
     }
 
     all_results: dict[str, list[dict]] = {}

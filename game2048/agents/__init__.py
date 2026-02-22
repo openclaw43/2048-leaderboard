@@ -40,6 +40,7 @@ from game2048.agents.rightleft_agent import RightLeftAgent
 from game2048.agents.rightdown_agent import RightDownAgent
 from game2048.agents.corner_agent import CornerAgent
 from game2048.agents.greedy_agent import GreedyAgent
+from game2048.agents.snake_agent import SnakeAgent
 
 __all__ = [
     "BaseAgent",
@@ -48,6 +49,7 @@ __all__ = [
     "RightDownAgent",
     "CornerAgent",
     "GreedyAgent",
+    "SnakeAgent",
     "register_agent",
     "get_agent",
     "list_agents",

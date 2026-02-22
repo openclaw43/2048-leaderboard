@@ -8,6 +8,7 @@ from game2048.agents import (
     GreedyAgent,
     SnakeAgent,
     ExpectimaxAgent,
+    MCTSAgent,
 )
 
 
@@ -276,6 +277,47 @@ class TestExpectimaxAgent(unittest.TestCase):
     def test_play_game(self):
         game = Game2048(seed=42)
         agent = ExpectimaxAgent(depth=2)
+        final_score = agent.play_game(game)
+        self.assertTrue(game.game_over)
+        self.assertIsInstance(final_score, int)
+        self.assertGreater(final_score, 0)
+
+
+class TestMCTSAgent(unittest.TestCase):
+    def test_agent_returns_valid_move(self):
+        game = Game2048(seed=42)
+        agent = MCTSAgent(simulations=10)
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_agent_returns_none_when_no_moves(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        game.game_over = False
+        agent = MCTSAgent(simulations=10)
+        move = agent.choose_move(game)
+        self.assertIsNone(move)
+
+    def test_agent_with_different_simulations(self):
+        game = Game2048(seed=42)
+        agent_10 = MCTSAgent(simulations=10)
+        agent_50 = MCTSAgent(simulations=50)
+        move1 = agent_10.choose_move(game)
+        move2 = agent_50.choose_move(game)
+        self.assertIn(move1, Game2048.MOVES)
+        self.assertIn(move2, Game2048.MOVES)
+
+    def test_agent_returns_single_valid_move(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 2, 0, 0], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        game.game_over = False
+        agent = MCTSAgent(simulations=10)
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_play_game(self):
+        game = Game2048(seed=42)
+        agent = MCTSAgent(simulations=10)
         final_score = agent.play_game(game)
         self.assertTrue(game.game_over)
         self.assertIsInstance(final_score, int)

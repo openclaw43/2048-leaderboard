@@ -13,6 +13,9 @@ from game2048.agents import (
     RightDownAgent,
     CornerAgent,
     GreedyAgent,
+    SnakeAgent,
+    ExpectimaxAgent,
+    MCTSAgent,
     BaseAgent,
 )
 from game2048.runner import GameRunner
@@ -106,6 +109,9 @@ def main():
         "rightdown": RightDownAgent(),
         "corner": CornerAgent(),
         "greedy": GreedyAgent(),
+        "snake": SnakeAgent(),
+        "expectimax": ExpectimaxAgent(depth=2),
+        "mcts": MCTSAgent(simulations=20),
     }
 
     all_results: dict[str, list[dict]] = {}

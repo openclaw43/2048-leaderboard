@@ -193,9 +193,10 @@ jobs:
       
       - name: Commit results to master
         if: github.ref == 'refs/heads/master'
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add benchmark_results.json
           git diff --quiet --cached || git commit -m "Update benchmark results [skip ci]"
-          git push
+          git push || echo "Note: Could not push to protected branch. Results are available as artifact."

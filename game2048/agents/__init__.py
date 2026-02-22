@@ -38,12 +38,14 @@ class BaseAgent:
 from game2048.agents.random_agent import RandomAgent
 from game2048.agents.rightleft_agent import RightLeftAgent
 from game2048.agents.rightdown_agent import RightDownAgent
+from game2048.agents.corner_agent import CornerAgent
 
 __all__ = [
     "BaseAgent",
     "RandomAgent",
     "RightLeftAgent",
     "RightDownAgent",
+    "CornerAgent",
     "register_agent",
     "get_agent",
     "list_agents",

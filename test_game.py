@@ -1,6 +1,6 @@
 import unittest
 from game2048.game import Game2048
-from game2048.agents import RandomAgent, RightLeftAgent, RightDownAgent
+from game2048.agents import RandomAgent, RightLeftAgent, RightDownAgent, CornerAgent
 
 
 class TestGame2048(unittest.TestCase):
@@ -125,6 +125,35 @@ class TestRightDownAgent(unittest.TestCase):
     def test_play_game(self):
         game = Game2048(seed=42)
         agent = RightDownAgent()
+        final_score = agent.play_game(game)
+        self.assertTrue(game.game_over)
+        self.assertIsInstance(final_score, int)
+        self.assertGreater(final_score, 0)
+
+
+class TestCornerAgent(unittest.TestCase):
+    def test_agent_prefers_corner_moves(self):
+        game = Game2048(seed=42)
+        agent = CornerAgent()
+        self.assertEqual(agent.preferred, ["down", "right", "left", "up"])
+
+    def test_agent_returns_valid_move(self):
+        game = Game2048(seed=42)
+        agent = CornerAgent()
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_agent_fallback_behavior(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 2, 4, 8], [4, 2, 2, 4], [8, 4, 2, 2], [2, 4, 8, 4]]
+        game.game_over = False
+        agent = CornerAgent()
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_play_game(self):
+        game = Game2048(seed=42)
+        agent = CornerAgent()
         final_score = agent.play_game(game)
         self.assertTrue(game.game_over)
         self.assertIsInstance(final_score, int)

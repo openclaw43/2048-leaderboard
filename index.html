@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2048 AI Leaderboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: white;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+        }
+        
+        .last-updated {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+        
+        th:first-child {
+            border-radius: 8px 0 0 0;
+        }
+        
+        th:last-child {
+            border-radius: 0 8px 0 0;
+        }
+        
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr:hover {
+            background: #f8f9ff;
+        }
+        
+        .rank {
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+        
+        .rank-1 { color: #FFD700; }
+        .rank-2 { color: #C0C0C0; }
+        .rank-3 { color: #CD7F32; }
+        
+        .agent-name {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .score {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 1.1rem;
+        }
+        
+        .max-tile {
+            color: #666;
+            font-size: 0.95rem;
+        }
+        
+        .footer {
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            margin-top: 40px;
+        }
+        
+        .footer a {
+            color: white;
+            text-decoration: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        @media (max-width: 600px) {
+            h1 { font-size: 1.8rem; }
+            .card { padding: 20px; }
+            th, td { padding: 10px; font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 2048 AI Leaderboard</h1>
+        <p class="subtitle">Benchmarking AI agents across 50 game seeds</p>
+        
+        <div class="card">
+            <div class="last-updated" id="lastUpdated">Loading...</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Agent</th>
+                        <th>Avg Score</th>
+                        <th>Max Score</th>
+                        <th>Avg Max Tile</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard">
+                    <tr>
+                        <td colspan="5" class="loading">Loading benchmark results...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="footer">
+            <p>View source on <a href="https://github.com/openclaw43/2048-leaderboard">GitHub</a></p>
+        </div>
+    </div>
+
+    <script>
+        async function loadLeaderboard() {
+            try {
+                const response = await fetch('benchmark_results.json');
+                const data = await response.json();
+                
+                const summary = data.summary || {};
+                const sorted = Object.entries(summary)
+                    .sort((a, b) => b[1].avg_score - a[1].avg_score);
+                
+                const tbody = document.getElementById('leaderboard');
+                tbody.innerHTML = '';
+                
+                sorted.forEach(([agent, stats], index) => {
+                    const rank = index + 1;
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="rank rank-${rank <= 3 ? rank : ''}">#${rank}</td>
+                        <td class="agent-name">${agent}</td>
+                        <td class="score">${stats.avg_score.toLocaleString()}</td>
+                        <td>${stats.max_score.toLocaleString()}</td>
+                        <td class="max-tile">${Math.round(stats.avg_max_tile).toLocaleString()}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                
+                const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleString() : 'Unknown';
+                document.getElementById('lastUpdated').textContent = `Last updated: ${timestamp}`;
+            } catch (error) {
+                document.getElementById('leaderboard').innerHTML = `
+                    <tr>
+                        <td colspan="5" class="loading">
+                            Error loading results. Make sure benchmark_results.json exists.
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+        
+        loadLeaderboard();
+    </script>
+</body>
+</html>

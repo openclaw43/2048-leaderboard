@@ -2,6 +2,8 @@
   "version": 2,
   "name": "2048-leaderboard",
   "public": true,
+  "buildCommand": null,
+  "outputDirectory": "site",
   "github": {
     "enabled": false
   }

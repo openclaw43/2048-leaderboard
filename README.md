@@ -60,6 +60,9 @@ uv run python benchmark.py --json --output results.json
 │       ├── random_agent.py
 │       ├── rightleft_agent.py
 │       └── rightdown_agent.py
+├── site/                  # Static leaderboard website
+│   ├── index.html        # Chart.js visualizations
+│   └── README.md         # Site deployment docs
 ├── .github/
 │   └── workflows/
 │       └── benchmark.yml # CI/CD for benchmarks
@@ -70,6 +73,7 @@ uv run python benchmark.py --json --output results.json
 │   └── implement_issue.py
 ├── main.py               # CLI entry point
 ├── benchmark.py          # Benchmarking script
+├── index.html            # Simple leaderboard (legacy)
 ├── test_game.py          # Unit tests
 ├── pyproject.toml        # UV project config
 └── README.md

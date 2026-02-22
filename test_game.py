@@ -9,6 +9,7 @@ from game2048.agents import (
     SnakeAgent,
     ExpectimaxAgent,
     MCTSAgent,
+    TDLearningAgent,
 )
 
 
@@ -318,6 +319,85 @@ class TestMCTSAgent(unittest.TestCase):
     def test_play_game(self):
         game = Game2048(seed=42)
         agent = MCTSAgent(simulations=10)
+        final_score = agent.play_game(game)
+        self.assertTrue(game.game_over)
+        self.assertIsInstance(final_score, int)
+        self.assertGreater(final_score, 0)
+
+
+class TestTDLearningAgent(unittest.TestCase):
+    def test_agent_returns_valid_move(self):
+        game = Game2048(seed=42)
+        agent = TDLearningAgent(seed=100)
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_agent_returns_none_when_no_moves(self):
+        game = Game2048(seed=42)
+        game.grid = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        game.game_over = False
+        agent = TDLearningAgent(seed=100)
+        move = agent.choose_move(game)
+        self.assertIsNone(move)
+
+    def test_agent_with_different_hyperparameters(self):
+        game = Game2048(seed=42)
+        agent1 = TDLearningAgent(alpha=0.01, gamma=0.99, seed=100)
+        agent2 = TDLearningAgent(alpha=0.001, gamma=0.95, seed=100)
+        move1 = agent1.choose_move(game)
+        move2 = agent2.choose_move(game)
+        self.assertIn(move1, Game2048.MOVES)
+        self.assertIn(move2, Game2048.MOVES)
+
+    def test_evaluate_returns_float(self):
+        game = Game2048(seed=42)
+        agent = TDLearningAgent(seed=100)
+        value = agent.evaluate(game)
+        self.assertIsInstance(value, float)
+
+    def test_pattern_extraction(self):
+        game = Game2048(seed=42)
+        agent = TDLearningAgent(seed=100)
+        features = agent._extract_features(game)
+        self.assertIsInstance(features, list)
+        self.assertTrue(len(features) > 0)
+
+    def test_training_updates_weights(self):
+        agent = TDLearningAgent(alpha=0.1, seed=100)
+        initial_weights = len(agent.weights)
+        results = agent.train(num_games=10, verbose=False)
+        self.assertGreaterEqual(len(agent.weights), initial_weights)
+
+    def test_save_and_load_weights(self):
+        import tempfile
+        import os
+
+        agent1 = TDLearningAgent(seed=100)
+        agent1.train(num_games=5, verbose=False)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as f:
+            temp_path = f.name
+
+        try:
+            agent1.save_weights(temp_path)
+            self.assertTrue(os.path.exists(temp_path))
+
+            agent2 = TDLearningAgent(seed=200)
+            loaded = agent2.load_weights(temp_path)
+            self.assertTrue(loaded)
+            self.assertEqual(agent1.weights, agent2.weights)
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    def test_load_nonexistent_weights(self):
+        agent = TDLearningAgent(seed=100)
+        loaded = agent.load_weights("/nonexistent/path/weights.pkl")
+        self.assertFalse(loaded)
+
+    def test_play_game(self):
+        game = Game2048(seed=42)
+        agent = TDLearningAgent(seed=100)
         final_score = agent.play_game(game)
         self.assertTrue(game.game_over)
         self.assertIsInstance(final_score, int)

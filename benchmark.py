@@ -16,6 +16,7 @@ from game2048.agents import (
     SnakeAgent,
     ExpectimaxAgent,
     MCTSAgent,
+    TDLearningAgent,
     BaseAgent,
 )
 from game2048.runner import GameRunner
@@ -112,6 +113,7 @@ def main():
         "snake": SnakeAgent(),
         "expectimax": ExpectimaxAgent(depth=2),
         "mcts": MCTSAgent(simulations=20),
+        "td_learning": TDLearningAgent(seed=42),
     }
 
     all_results: dict[str, list[dict]] = {}

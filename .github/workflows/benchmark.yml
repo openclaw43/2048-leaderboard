@@ -4,18 +4,105 @@ on:
   push:
     branches:
       - main
-      - '**'
+    paths:
+      - 'game2048/**/*.py'
+      - 'benchmark.py'
+      - 'pyproject.toml'
+      - '.github/workflows/benchmark.yml'
   pull_request:
     types: [opened, synchronize]
+    paths:
+      - 'game2048/**/*.py'
+      - 'benchmark.py'
+      - 'pyproject.toml'
+      - '.github/workflows/benchmark.yml'
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      agents: ${{ steps.detect.outputs.agents }}
+      cache_key: ${{ steps.detect.outputs.cache_key }}
+      cache_hit: ${{ steps.cache-check.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Detect changed agents
+        id: detect
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "agents=all" >> $GITHUB_OUTPUT
+            echo "cache_key=" >> $GITHUB_OUTPUT
+          else
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.sha }}"
+            
+            CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA)
+            
+            AGENT_FILES=$(echo "$CHANGED_FILES" | grep -E '^game2048/agents/.*\.py$' || true)
+            CORE_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(game2048/game\.py|game2048/runner\.py|benchmark\.py|pyproject\.toml)$' || true)
+            
+            if [[ -n "$CORE_CHANGED" ]]; then
+              echo "agents=all" >> $GITHUB_OUTPUT
+              echo "cache_key=" >> $GITHUB_OUTPUT
+            elif [[ -n "$AGENT_FILES" ]]; then
+              AGENTS=""
+              for file in $AGENT_FILES; do
+                filename=$(basename "$file" .py)
+                case "$filename" in
+                  random_agent) agent="random" ;;
+                  rightleft_agent) agent="rightleft" ;;
+                  rightdown_agent) agent="rightdown" ;;
+                  corner_agent) agent="corner" ;;
+                  greedy_agent) agent="greedy" ;;
+                  snake_agent) agent="snake" ;;
+                  expectimax_agent) agent="expectimax" ;;
+                  mcts_agent) agent="mcts" ;;
+                  td_learning_agent) agent="td_learning" ;;
+                  *) agent="" ;;
+                esac
+                if [[ -n "$agent" && ! "$AGENTS" =~ "$agent" ]]; then
+                  if [[ -n "$AGENTS" ]]; then
+                    AGENTS="$AGENTS,$agent"
+                  else
+                    AGENTS="$agent"
+                  fi
+                fi
+              done
+              AGENTS="$AGENTS,random"
+              echo "agents=$AGENTS" >> $GITHUB_OUTPUT
+              
+              HASH=$(echo "$AGENT_FILES" | xargs sha256sum | sha256sum | cut -d' ' -f1)
+              echo "cache_key=benchmark-${{ runner.os }}-${HASH}" >> $GITHUB_OUTPUT
+            else
+              echo "agents=random" >> $GITHUB_OUTPUT
+              echo "cache_key=" >> $GITHUB_OUTPUT
+            fi
+          fi
+          
+          echo "Detected agents: $(cat $GITHUB_OUTPUT | grep agents= | cut -d= -f2)"
+      
+      - name: Check cache
+        id: cache-check
+        if: steps.detect.outputs.cache_key != ''
+        uses: actions/cache@v4
+        with:
+          path: cached_results.json
+          key: ${{ steps.detect.outputs.cache_key }}
+
   benchmark:
+    needs: detect-changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -30,14 +117,78 @@ jobs:
       - name: Install dependencies
         run: uv sync
       
+      - name: Restore cached results
+        if: needs.detect-changes.outputs.cache_hit == 'true'
+        run: |
+          if [[ -f cached_results.json ]]; then
+            cp cached_results.json benchmark_results.json
+            echo "Using cached benchmark results"
+          fi
+      
       - name: Run benchmarks
-        run: uv run python benchmark.py --json --output benchmark_results.json
+        if: needs.detect-changes.outputs.cache_hit != 'true'
+        env:
+          AGENTS: ${{ needs.detect-changes.outputs.agents }}
+        run: |
+          if [[ "$AGENTS" == "all" ]]; then
+            uv run python benchmark.py --json --output benchmark_results.json
+          else
+            uv run python benchmark.py --json --output benchmark_results.json --agents "$AGENTS"
+          fi
+      
+      - name: Save results to cache
+        if: needs.detect-changes.outputs.cache_key != '' && needs.detect-changes.outputs.cache_hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: benchmark_results.json
+          key: ${{ needs.detect-changes.outputs.cache_key }}
       
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
           path: benchmark_results.json
+      
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! -f benchmark_results.json ]]; then
+            echo "No benchmark results found"
+            exit 0
+          fi
+          
+          python3 << 'EOF'
+          import json
+          import subprocess
+          
+          with open('benchmark_results.json') as f:
+              results = json.load(f)
+          
+          summary = results.get('summary', {})
+          
+          if not summary:
+              print("No summary data available")
+              exit(0)
+          
+          comment = "## Benchmark Results\n\n"
+          comment += f"**Agents tested**: {', '.join(summary.keys())}\n\n"
+          comment += "| Agent | Avg Score | Max Score | Avg Max Tile |\n"
+          comment += "|-------|-----------|-----------|-------------|\n"
+          
+          for name, stats in sorted(summary.items(), key=lambda x: x[1]['avg_score'], reverse=True):
+              comment += f"| {name} | {stats['avg_score']:.1f} | {stats['max_score']} | {stats['avg_max_tile']:.1f} |\n"
+          
+          comment += f"\n_Timestamp: {results.get('timestamp', 'N/A')}_"
+          
+          with open('pr_comment.md', 'w') as f:
+              f.write(comment)
+          EOF
+          
+          if [[ -f pr_comment.md ]]; then
+            gh pr comment ${{ github.event.pull_request.number }} --body-file pr_comment.md
+          fi
       
       - name: Commit results to main
         if: github.ref == 'refs/heads/main'

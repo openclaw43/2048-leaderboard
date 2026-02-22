@@ -100,11 +100,19 @@ def main():
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Print per-seed results"
     )
+    parser.add_argument(
+        "--agents",
+        "-a",
+        type=str,
+        default=None,
+        help="Comma-separated list of agents to benchmark (e.g., random,greedy,snake). "
+        "If not specified, runs all agents.",
+    )
     args = parser.parse_args()
 
     seeds = range(1, args.seeds + 1)
 
-    agents = {
+    all_agents = {
         "random": RandomAgent(seed=42),
         "rightleft": RightLeftAgent(),
         "rightdown": RightDownAgent(),
@@ -115,6 +123,17 @@ def main():
         "mcts": MCTSAgent(simulations=20),
         "td_learning": TDLearningAgent(seed=42),
     }
+
+    if args.agents:
+        requested = [a.strip().lower() for a in args.agents.split(",")]
+        invalid = [a for a in requested if a not in all_agents]
+        if invalid:
+            print(f"Error: Unknown agent(s): {', '.join(invalid)}")
+            print(f"Available agents: {', '.join(all_agents.keys())}")
+            return 1
+        agents = {name: all_agents[name] for name in requested}
+    else:
+        agents = all_agents
 
     all_results: dict[str, list[dict]] = {}
 

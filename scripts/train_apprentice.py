@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train an Apprentice agent to imitate MCTS behavior."""
+"""Train an Apprentice agent to imitate Expectimax behavior."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from game2048.agents.apprentice_agent import ApprenticeAgent
+from game2048.agents.expectimax_agent import ExpectimaxAgent
+from game2048.agents.mcts_agent import MCTSAgent
 from game2048.game import Game2048
 
 
@@ -43,7 +45,20 @@ def main() -> int:
         "--samples", type=int, default=20000, help="Number of training samples"
     )
     parser.add_argument(
-        "--mcts-simulations", type=int, default=20, help="MCTS simulations for teacher"
+        "--teacher",
+        type=str,
+        default="expectimax",
+        choices=["expectimax", "mcts"],
+        help="Teacher agent: expectimax (default) or mcts",
+    )
+    parser.add_argument(
+        "--expectimax-depth", type=int, default=2, help="Expectimax search depth"
+    )
+    parser.add_argument(
+        "--mcts-simulations",
+        type=int,
+        default=20,
+        help="MCTS simulations (if using MCTS teacher)",
     )
     parser.add_argument("--epochs", type=int, default=30, help="Training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
@@ -60,11 +75,20 @@ def main() -> int:
     )
     args = parser.parse_args()
     hidden_sizes = [int(x) for x in args.hidden_sizes.split(",")]
+
+    if args.teacher == "expectimax":
+        teacher = ExpectimaxAgent(depth=args.expectimax_depth)
+        teacher_info = f"Expectimax(depth={args.expectimax_depth})"
+    else:
+        teacher = MCTSAgent(simulations=args.mcts_simulations)
+        teacher_info = f"MCTS(simulations={args.mcts_simulations})"
+
     print(f"Training Apprentice agent with {args.samples} samples...")
+    print(f"Teacher: {teacher_info}")
     print(f"Hidden sizes: {hidden_sizes}, Epochs: {args.epochs}, LR: {args.lr}")
     agent = ApprenticeAgent.from_training(
         num_samples=args.samples,
-        mcts_simulations=args.mcts_simulations,
+        teacher=teacher,
         hidden_sizes=hidden_sizes,
         epochs=args.epochs,
         lr=args.lr,

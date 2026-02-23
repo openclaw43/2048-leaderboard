@@ -33,7 +33,7 @@ jobs:
         run: uv sync
       
       - name: Run benchmarks
-        run: uv run python benchmark.py --json --output benchmark_results.json
+        run: uv run python benchmark.py --parallel --json --output benchmark_results.json
       
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4

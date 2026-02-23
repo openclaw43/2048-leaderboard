@@ -3,6 +3,8 @@
 
 import argparse
 import json
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
 
@@ -20,6 +22,38 @@ from game2048.agents import (
     BaseAgent,
 )
 from game2048.runner import GameRunner
+
+
+def get_agent_class(name: str) -> Optional[type]:
+    """Get agent class by name."""
+    agents = {
+        "random": RandomAgent,
+        "rightleft": RightLeftAgent,
+        "rightdown": RightDownAgent,
+        "corner": CornerAgent,
+        "greedy": GreedyAgent,
+        "snake": SnakeAgent,
+        "expectimax": ExpectimaxAgent,
+        "mcts": MCTSAgent,
+        "td_learning": TDLearningAgent,
+    }
+    return agents.get(name)
+
+
+def create_agent(name: str) -> BaseAgent:
+    """Create an agent instance by name."""
+    agent_classes = {
+        "random": lambda: RandomAgent(seed=42),
+        "rightleft": lambda: RightLeftAgent(),
+        "rightdown": lambda: RightDownAgent(),
+        "corner": lambda: CornerAgent(),
+        "greedy": lambda: GreedyAgent(),
+        "snake": lambda: SnakeAgent(),
+        "expectimax": lambda: ExpectimaxAgent(depth=2),
+        "mcts": lambda: MCTSAgent(simulations=20),
+        "td_learning": lambda: TDLearningAgent(seed=42),
+    }
+    return agent_classes[name]()
 
 
 def run_game(agent: BaseAgent, seed: int) -> dict:
@@ -49,6 +83,54 @@ def benchmark_agent(
                 f"  Seed {seed:2d}: Score={result['score']:5d}, Max={result['max_tile']:4d}, Moves={result['moves']:3d}"
             )
     return results
+
+
+def benchmark_agent_worker(agent_name: str, seeds: list[int]) -> tuple[str, list[dict]]:
+    """Worker function for parallel benchmarking - creates agent and runs games."""
+    agent = create_agent(agent_name)
+    results = []
+    for seed in seeds:
+        result = run_game(agent, seed)
+        results.append(result)
+    return agent_name, results
+
+
+def run_parallel_benchmarks(
+    agent_names: list[str],
+    seeds: range,
+    max_workers: Optional[int] = None,
+    verbose: bool = False,
+) -> dict[str, list[dict]]:
+    """Run all agents in parallel using ProcessPoolExecutor."""
+    if max_workers is None:
+        max_workers = min(len(agent_names), mp.cpu_count())
+
+    seeds_list = list(seeds)
+    all_results: dict[str, list[dict]] = {}
+
+    if verbose:
+        print(
+            f"Running {len(agent_names)} agents in parallel with {max_workers} workers..."
+        )
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(benchmark_agent_worker, name, seeds_list): name
+            for name in agent_names
+        }
+
+        for future in as_completed(futures):
+            agent_name = futures[future]
+            try:
+                name, results = future.result()
+                all_results[name] = results
+                if verbose:
+                    print(f"  Completed {name} agent")
+            except Exception as e:
+                print(f"Error running {agent_name}: {e}")
+                all_results[agent_name] = []
+
+    return all_results
 
 
 def compute_summary(results: list[dict]) -> dict:
@@ -108,6 +190,24 @@ def main():
         help="Comma-separated list of agents to benchmark (e.g., random,greedy,snake). "
         "If not specified, runs all agents.",
     )
+    parser.add_argument(
+        "--parallel",
+        "-p",
+        action="store_true",
+        help="Run agents in parallel using multiple processes",
+    )
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        help="Number of parallel workers (default: auto-detect based on CPU count)",
+    )
+    parser.add_argument(
+        "--sequential",
+        action="store_true",
+        help="Force sequential execution (default behavior)",
+    )
     args = parser.parse_args()
 
     seeds = range(1, args.seeds + 1)
@@ -136,16 +236,30 @@ def main():
         agents = all_agents
 
     all_results: dict[str, list[dict]] = {}
+    use_parallel = args.parallel or args.jobs is not None
+    if args.sequential:
+        use_parallel = False
 
     if not args.json:
         print(f"Benchmarking 2048 agents with seeds 1-{args.seeds}...")
+        if use_parallel:
+            workers = args.jobs or min(len(agents), mp.cpu_count())
+            print(f"Using parallel execution with {workers} workers")
         print("=" * 60)
 
-    for name, agent in agents.items():
-        if not args.json:
-            print(f"\nRunning {name} agent...")
-        results = benchmark_agent(agent, seeds, verbose=args.verbose and not args.json)
-        all_results[name] = results
+    if use_parallel:
+        agent_names = list(agents.keys())
+        all_results = run_parallel_benchmarks(
+            agent_names, seeds, max_workers=args.jobs, verbose=not args.json
+        )
+    else:
+        for name, agent in agents.items():
+            if not args.json:
+                print(f"\nRunning {name} agent...")
+            results = benchmark_agent(
+                agent, seeds, verbose=args.verbose and not args.json
+            )
+            all_results[name] = results
 
     if args.json:
         output_data = {

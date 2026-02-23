@@ -174,7 +174,7 @@ def generate_training_data(
 def train_network(
     X: np.ndarray,
     y: np.ndarray,
-    hidden_sizes: list[int] = [128, 64],
+    hidden_sizes: list[int] = [128, 128, 128],
     epochs: int = 30,
     lr: float = 0.001,
     batch_size: int = 64,
@@ -264,7 +264,7 @@ class ApprenticeAgent(BaseAgent):
     inference_times: list[float]
 
     def __init__(
-        self, model_path: Optional[str] = None, hidden_sizes: list[int] = [128, 64]
+        self, model_path: Optional[str] = None, hidden_sizes: list[int] = [128, 128, 128]
     ) -> None:
         self.model_path = model_path
         self.inference_times = []
@@ -310,7 +310,7 @@ class ApprenticeAgent(BaseAgent):
         self,
         num_samples: int = 20000,
         teacher: Optional[BaseAgent] = None,
-        hidden_sizes: list[int] = [128, 64],
+        hidden_sizes: list[int] = [128, 128, 128],
         epochs: int = 30,
         lr: float = 0.001,
         batch_size: int = 64,
@@ -364,7 +364,7 @@ class ApprenticeAgent(BaseAgent):
         cls,
         num_samples: int = 20000,
         teacher: Optional[BaseAgent] = None,
-        hidden_sizes: list[int] = [128, 64],
+        hidden_sizes: list[int] = [128, 128, 128],
         epochs: int = 30,
         lr: float = 0.001,
         batch_size: int = 64,

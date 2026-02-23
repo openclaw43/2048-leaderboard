@@ -49,15 +49,18 @@ class NeuralNetwork:
             self.biases.append(np.zeros((sizes[i + 1], 1), dtype=np.float32))
 
     def relu(self, x: np.ndarray) -> np.ndarray:
-        return np.maximum(0, x)
+        result: np.ndarray = np.maximum(0, x).astype(np.float32)
+        return result
 
     def relu_derivative(self, x: np.ndarray) -> np.ndarray:
-        return (x > 0).astype(np.float32)
+        result: np.ndarray = np.greater(x, 0).astype(np.float32)
+        return result
 
     def softmax(self, x: np.ndarray) -> np.ndarray:
         shifted = x - np.max(x, axis=0, keepdims=True)
         exp_x = np.exp(shifted)
-        return exp_x / np.sum(exp_x, axis=0, keepdims=True)
+        result: np.ndarray = exp_x / np.sum(exp_x, axis=0, keepdims=True)
+        return result
 
     def forward(self, x: np.ndarray) -> tuple[np.ndarray, list[np.ndarray]]:
         activations = [x]
@@ -85,8 +88,8 @@ class NeuralNetwork:
         output, activations = self.forward(x)
         loss = self.cross_entropy_loss(output, y)
         delta = output - y
-        weight_grads = []
-        bias_grads = []
+        weight_grads: list[np.ndarray] = []
+        bias_grads: list[np.ndarray] = []
         for i in range(len(self.weights) - 1, -1, -1):
             weight_grads.insert(0, delta @ activations[i].T)
             bias_grads.insert(0, delta)
@@ -257,8 +260,11 @@ class ApprenticeAgent(BaseAgent):
         self.model_path = model_path
         self.inference_times = []
         default_model = Path(__file__).parent / "apprentice_model.pkl"
-        if model_path and Path(model_path).exists():
-            self.network = NeuralNetwork.load(model_path)
+        if model_path:
+            if Path(model_path).exists():
+                self.network = NeuralNetwork.load(model_path)
+            else:
+                self.network = None
         elif default_model.exists():
             self.network = NeuralNetwork.load(str(default_model))
         else:

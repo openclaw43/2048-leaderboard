@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from game2048.agents import (
+    ApprenticeAgent,
     CornerAgent,
     ExpectimaxAgent,
     GreedyAgent,
@@ -398,6 +399,91 @@ class TestTDLearningAgent(unittest.TestCase):
     def test_play_game(self) -> None:
         game = Game2048(seed=42)
         agent = TDLearningAgent(seed=100)
+        final_score = agent.play_game(game)
+        self.assertTrue(game.game_over)
+        self.assertIsInstance(final_score, int)
+        self.assertGreater(final_score, 0)
+
+
+class TestApprenticeAgent(unittest.TestCase):
+    def test_agent_returns_valid_move(self) -> None:
+        game = Game2048(seed=42)
+        agent = ApprenticeAgent()
+        agent.train(num_samples=100, epochs=2, verbose=False, seed=42)
+        move = agent.choose_move(game)
+        self.assertIn(move, Game2048.MOVES)
+
+    def test_agent_returns_none_when_no_moves(self) -> None:
+        game = Game2048(seed=42)
+        game.grid = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        game.game_over = False
+        agent = ApprenticeAgent()
+        agent.train(num_samples=100, epochs=2, verbose=False, seed=42)
+        move = agent.choose_move(game)
+        self.assertIsNone(move)
+
+    def test_agent_with_different_hidden_sizes(self) -> None:
+        game = Game2048(seed=42)
+        agent1 = ApprenticeAgent(hidden_sizes=[64, 32])
+        agent1.train(num_samples=100, epochs=2, verbose=False, seed=42)
+        agent2 = ApprenticeAgent(hidden_sizes=[256])
+        agent2.train(num_samples=100, epochs=2, verbose=False, seed=42)
+        move1 = agent1.choose_move(game)
+        move2 = agent2.choose_move(game)
+        self.assertIn(move1, Game2048.MOVES)
+        self.assertIn(move2, Game2048.MOVES)
+
+    def test_inference_time_is_fast(self) -> None:
+        import time
+
+        game = Game2048(seed=42)
+        agent = ApprenticeAgent()
+        agent.train(num_samples=100, epochs=2, verbose=False, seed=42)
+        times = []
+        for _ in range(10):
+            start = time.perf_counter()
+            agent.choose_move(game)
+            elapsed = (time.perf_counter() - start) * 1000
+            times.append(elapsed)
+        avg_time = sum(times) / len(times)
+        self.assertLess(avg_time, 10.0)
+
+    def test_training_improves_validation_accuracy(self) -> None:
+        agent = ApprenticeAgent()
+        history = agent.train(num_samples=500, epochs=5, verbose=False, seed=42)
+        self.assertGreater(history["val_accuracy"], 0.15)
+
+    def test_save_and_load_model(self) -> None:
+        import os
+        import tempfile
+
+        agent1 = ApprenticeAgent()
+        agent1.train(num_samples=100, epochs=2, verbose=False, seed=42)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as f:
+            temp_path = f.name
+
+        try:
+            agent1.save_model(temp_path)
+            self.assertTrue(os.path.exists(temp_path))
+
+            agent2 = ApprenticeAgent(model_path=temp_path)
+            game = Game2048(seed=42)
+            move1 = agent1.choose_move(game)
+            move2 = agent2.choose_move(game)
+            self.assertEqual(move1, move2)
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    def test_load_nonexistent_model(self) -> None:
+        agent = ApprenticeAgent(model_path="/nonexistent/path/model.pkl")
+        self.assertIsNone(agent.network)
+
+    def test_play_game(self) -> None:
+        game = Game2048(seed=42)
+        agent = ApprenticeAgent()
+        agent.train(num_samples=200, epochs=3, verbose=False, seed=42)
         final_score = agent.play_game(game)
         self.assertTrue(game.game_over)
         self.assertIsInstance(final_score, int)

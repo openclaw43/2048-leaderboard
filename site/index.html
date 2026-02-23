@@ -193,14 +193,31 @@
                         <th>Rank</th>
                         <th>Agent</th>
                         <th>Avg Score</th>
+                        <th>Median</th>
+                        <th>Std Dev</th>
                         <th>95% CI</th>
-                        <th>Max Score</th>
-                        <th>Min Score</th>
-                        <th>Avg Max Tile</th>
+                        <th>Consistency</th>
                     </tr>
                 </thead>
                 <tbody id="leaderboard">
                     <tr><td colspan="7" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="card">
+            <h2>Win Rates (% reaching tile)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Agent</th>
+                        <th>2048</th>
+                        <th>1024</th>
+                        <th>512</th>
+                    </tr>
+                </thead>
+                <tbody id="winRatesTable">
+                    <tr><td colspan="4" class="loading">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -221,9 +238,16 @@
             </div>
             
             <div class="card">
-                <h2>Max Tile Distribution</h2>
+                <h2>Win Rates Comparison</h2>
                 <div class="chart-container">
-                    <canvas id="maxTileChart"></canvas>
+                    <canvas id="winRatesChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Consistency (Lower CV = More Consistent)</h2>
+                <div class="chart-container">
+                    <canvas id="consistencyChart"></canvas>
                 </div>
             </div>
             
@@ -231,6 +255,13 @@
                 <h2>Agent Comparison</h2>
                 <div class="chart-container">
                     <canvas id="radarChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Max Tile Distribution</h2>
+                <div class="chart-container">
+                    <canvas id="maxTileChart"></canvas>
                 </div>
             </div>
         </div>
@@ -269,10 +300,11 @@
                 if (!response.ok) throw new Error('Failed to load data');
                 benchmarkData = await response.json();
                 renderLeaderboard();
+                renderWinRates();
                 renderCharts();
             } catch (error) {
                 document.getElementById('leaderboard').innerHTML = 
-                    '<tr><td colspan="6" class="error">Error loading benchmark data</td></tr>';
+                    '<tr><td colspan="7" class="error">Error loading benchmark data</td></tr>';
                 document.getElementById('lastUpdated').textContent = 'Error loading data';
             }
         }
@@ -281,24 +313,29 @@
             const summary = benchmarkData.summary || {};
             const confidenceIntervals = benchmarkData.confidence_intervals || {};
             const rankRanges = benchmarkData.rank_ranges || {};
+            const extended = benchmarkData.extended || {};
             const sorted = Object.entries(summary).sort((a, b) => b[1].avg_score - a[1].avg_score);
             
             const tbody = document.getElementById('leaderboard');
             tbody.innerHTML = sorted.map(([agent, stats], i) => {
                 const rankInfo = rankRanges[agent] || { display: `#${i + 1}` };
                 const ci = confidenceIntervals[agent] || { lower: stats.avg_score, upper: stats.avg_score };
+                const ext = extended[agent] || { distribution: {}, consistency: {} };
                 const ciDisplay = `[${Math.round(ci.lower).toLocaleString()}, ${Math.round(ci.upper).toLocaleString()}]`;
                 const rankDisplay = rankInfo.display || `#${i + 1}`;
                 const rankClass = rankInfo.min <= 3 ? `rank-${rankInfo.min}` : '';
+                const median = ext.distribution.median || stats.avg_score;
+                const stdDev = ext.distribution.std_dev || 0;
+                const consistency = ext.consistency.coefficient_of_variation || 0;
                 return `
                     <tr>
                         <td class="rank ${rankClass}">${rankDisplay}</td>
                         <td class="agent-name">${agent}</td>
                         <td class="score">${stats.avg_score.toLocaleString()}</td>
+                        <td>${Math.round(median).toLocaleString()}</td>
+                        <td>${Math.round(stdDev).toLocaleString()}</td>
                         <td>${ciDisplay}</td>
-                        <td>${stats.max_score.toLocaleString()}</td>
-                        <td>${stats.min_score.toLocaleString()}</td>
-                        <td>${Math.round(stats.avg_max_tile).toLocaleString()}</td>
+                        <td>${consistency.toFixed(1)}%</td>
                     </tr>
                 `;
             }).join('');
@@ -307,6 +344,26 @@
                 ? new Date(benchmarkData.timestamp).toLocaleString() 
                 : 'Unknown';
             document.getElementById('lastUpdated').textContent = `Last updated: ${timestamp}`;
+        }
+        
+        function renderWinRates() {
+            const extended = benchmarkData.extended || {};
+            const summary = benchmarkData.summary || {};
+            const sorted = Object.entries(summary).sort((a, b) => b[1].avg_score - a[1].avg_score);
+            
+            const tbody = document.getElementById('winRatesTable');
+            tbody.innerHTML = sorted.map(([agent]) => {
+                const ext = extended[agent] || { win_rates: {} };
+                const wr = ext.win_rates || {};
+                return `
+                    <tr>
+                        <td class="agent-name">${agent}</td>
+                        <td>${(wr.reached_2048 || 0).toFixed(1)}%</td>
+                        <td>${(wr.reached_1024 || 0).toFixed(1)}%</td>
+                        <td>${(wr.reached_512 || 0).toFixed(1)}%</td>
+                    </tr>
+                `;
+            }).join('');
         }
         
         function getBarColors(count) {
@@ -322,6 +379,7 @@
         
         function renderCharts() {
             const summary = benchmarkData.summary || {};
+            const extended = benchmarkData.extended || {};
             const agents = Object.keys(summary);
             const sorted = Object.entries(summary).sort((a, b) => b[1].avg_score - a[1].avg_score);
             const sortedAgents = sorted.map(s => s[0]);
@@ -383,6 +441,73 @@
                 }
             });
             
+            new Chart(document.getElementById('winRatesChart'), {
+                type: 'bar',
+                data: {
+                    labels: sortedAgents,
+                    datasets: [
+                        {
+                            label: '2048',
+                            data: sortedAgents.map(a => (extended[a]?.win_rates?.reached_2048 || 0)),
+                            backgroundColor: '#27ae60',
+                            borderRadius: 4
+                        },
+                        {
+                            label: '1024',
+                            data: sortedAgents.map(a => (extended[a]?.win_rates?.reached_1024 || 0)),
+                            backgroundColor: '#3498db',
+                            borderRadius: 4
+                        },
+                        {
+                            label: '512',
+                            data: sortedAgents.map(a => (extended[a]?.win_rates?.reached_512 || 0)),
+                            backgroundColor: '#f39c12',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { max: 100, title: { display: true, text: '%' } }
+                    },
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+            
+            const consistencyData = sortedAgents.map(a => extended[a]?.consistency?.coefficient_of_variation || 0);
+            new Chart(document.getElementById('consistencyChart'), {
+                type: 'bar',
+                data: {
+                    labels: sortedAgents,
+                    datasets: [{
+                        label: 'CV (%)',
+                        data: consistencyData,
+                        backgroundColor: sortedAgents.map((_, i) => 
+                            i === 0 ? chartColors.gold : 
+                            i === 1 ? chartColors.silver : 
+                            i === 2 ? chartColors.bronze : chartColors.primary
+                        ),
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `CV: ${ctx.raw.toFixed(1)}% (Lower is more consistent)`
+                            }
+                        }
+                    }
+                }
+            });
+            
             const tileBuckets = { '512+': 0, '256': 0, '128': 0, '64': 0, '<64': 0 };
             const agentGames = benchmarkData.agents || {};
             
@@ -418,23 +543,13 @@
             
             const maxScores = Math.max(...Object.values(summary).map(s => s.max_score));
             const maxTiles = Math.max(...Object.values(summary).map(s => s.avg_max_tile));
-            const maxStd = Math.max(...Object.values(summary).map(s => {
-                const games = agentGames[s] || [];
-                const avg = summary[Object.keys(summary).find(k => {
-                    const agentGames2 = benchmarkData.agents[k];
-                    return agentGames2 === games;
-                })]?.avg_score || 0;
-                const variance = games.reduce((sum, g) => sum + Math.pow(g.score - avg, 2), 0) / games.length;
-                return Math.sqrt(variance);
-            }));
+            const maxCV = Math.max(...consistencyData) || 1;
             
             const radarData = sortedAgents.map(agent => {
-                const games = benchmarkData.agents[agent] || [];
-                const avg = summary[agent].avg_score;
-                const variance = games.reduce((sum, g) => sum + Math.pow(g.score - avg, 2), 0) / games.length;
-                const stdDev = Math.sqrt(variance);
-                const consistency = maxStd > 0 ? ((maxStd - stdDev) / maxStd) * 100 : 100;
-                const maxTileRate = games.filter(g => g.max_tile >= 2048).length / games.length * 100;
+                const ext = extended[agent] || {};
+                const cv = ext.consistency?.coefficient_of_variation || 0;
+                const consistency = ((maxCV - cv) / maxCV) * 100;
+                const maxTileRate = ext.win_rates?.reached_2048 || 0;
                 
                 return {
                     label: agent,

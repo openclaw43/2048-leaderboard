@@ -193,13 +193,14 @@
                         <th>Rank</th>
                         <th>Agent</th>
                         <th>Avg Score</th>
+                        <th>95% CI</th>
                         <th>Max Score</th>
                         <th>Min Score</th>
                         <th>Avg Max Tile</th>
                     </tr>
                 </thead>
                 <tbody id="leaderboard">
-                    <tr><td colspan="6" class="loading">Loading...</td></tr>
+                    <tr><td colspan="7" class="loading">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -278,16 +279,23 @@
         
         function renderLeaderboard() {
             const summary = benchmarkData.summary || {};
+            const confidenceIntervals = benchmarkData.confidence_intervals || {};
+            const rankRanges = benchmarkData.rank_ranges || {};
             const sorted = Object.entries(summary).sort((a, b) => b[1].avg_score - a[1].avg_score);
             
             const tbody = document.getElementById('leaderboard');
             tbody.innerHTML = sorted.map(([agent, stats], i) => {
-                const rank = i + 1;
+                const rankInfo = rankRanges[agent] || { display: `#${i + 1}` };
+                const ci = confidenceIntervals[agent] || { lower: stats.avg_score, upper: stats.avg_score };
+                const ciDisplay = `[${Math.round(ci.lower).toLocaleString()}, ${Math.round(ci.upper).toLocaleString()}]`;
+                const rankDisplay = rankInfo.display || `#${i + 1}`;
+                const rankClass = rankInfo.min <= 3 ? `rank-${rankInfo.min}` : '';
                 return `
                     <tr>
-                        <td class="rank rank-${rank <= 3 ? rank : ''}">#${rank}</td>
+                        <td class="rank ${rankClass}">${rankDisplay}</td>
                         <td class="agent-name">${agent}</td>
                         <td class="score">${stats.avg_score.toLocaleString()}</td>
+                        <td>${ciDisplay}</td>
                         <td>${stats.max_score.toLocaleString()}</td>
                         <td>${stats.min_score.toLocaleString()}</td>
                         <td>${Math.round(stats.avg_max_tile).toLocaleString()}</td>

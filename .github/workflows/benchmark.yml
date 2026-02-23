@@ -54,6 +54,8 @@ jobs:
               results = json.load(f)
           
           summary = results.get('summary', {})
+          confidence_intervals = results.get('confidence_intervals', {})
+          rank_ranges = results.get('rank_ranges', {})
           
           if not summary:
               print("No summary data available")
@@ -61,15 +63,22 @@ jobs:
           
           sorted_agents = sorted(summary.items(), key=lambda x: x[1]['avg_score'], reverse=True)
           
-          comment = "## Benchmark Results\n\n"
-          comment += "| Rank | Agent | Avg Score | Max Score | Avg Max Tile |\n"
-          comment += "|------|-------|-----------|-----------|-------------|\n"
+          comment = "## Benchmark Results (with 95% confidence intervals)\n\n"
+          comment += "| Rank | Agent | Avg Score | 95% CI | Max Score | Avg Max Tile |\n"
+          comment += "|------|-------|-----------|--------|-----------|-------------|\n"
           
           for i, (name, stats) in enumerate(sorted_agents, 1):
-              medal = " " if i > 3 else {"1": " ", "2": " ", "3": " "}[str(i)]
-              comment += f"| #{i} | **{name}** | {stats['avg_score']:.1f} | {stats['max_score']} | {stats['avg_max_tile']:.1f} |\n"
+              rank_info = rank_ranges.get(name, {})
+              rank_display = rank_info.get('display', f'#{i}')
+              ci_info = confidence_intervals.get(name, {})
+              ci_lower = ci_info.get('lower', stats['avg_score'])
+              ci_upper = ci_info.get('upper', stats['avg_score'])
+              ci_display = f"[{ci_lower:.0f}, {ci_upper:.0f}]"
+              comment += f"| {rank_display} | **{name}** | {stats['avg_score']:.1f} | {ci_display} | {stats['max_score']} | {stats['avg_max_tile']:.1f} |\n"
           
-          comment += f"\n_Timestamp: {results.get('timestamp', 'N/A')}_"
+          alpha = results.get('statistical_params', {}).get('alpha', 0.05)
+          comment += f"\n_Statistical significance level: α = {alpha}_\n"
+          comment += f"_Timestamp: {results.get('timestamp', 'N/A')}_"
           
           with open('pr_comment.md', 'w') as f:
               f.write(comment)

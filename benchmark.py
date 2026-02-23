@@ -22,6 +22,7 @@ from game2048.agents import (
     BaseAgent,
 )
 from game2048.runner import GameRunner
+from game2048.stats import compute_all_statistics, format_rank_range, get_rank_emoji
 
 
 def get_agent_class(name: str) -> Optional[type]:
@@ -156,17 +157,36 @@ def print_summary(name: str, results: list[dict]) -> None:
     print(f"  Avg Tile:   {summary['avg_max_tile']:.1f}")
 
 
-def print_comparison(all_results: dict[str, list[dict]]) -> None:
-    """Print comparison table of all agents."""
-    print("\n" + "=" * 60)
-    print("COMPARISON")
-    print("=" * 60)
-    print(f"{'Agent':<12} {'Avg Score':>10} {'Max Score':>10} {'Avg Tile':>10}")
-    print("-" * 60)
-    for name, results in all_results.items():
-        summary = compute_summary(results)
+def print_comparison(all_results: dict[str, list[dict]], alpha: float = 0.05) -> None:
+    """Print comparison table of all agents with statistical analysis."""
+    from game2048.stats import compute_all_statistics, format_rank_range, get_rank_emoji
+
+    stats_data = compute_all_statistics(all_results, alpha=alpha)
+    summaries = stats_data["summaries"]
+    confidence_intervals = stats_data["confidence_intervals"]
+    rank_ranges = stats_data["rank_ranges"]
+
+    sorted_agents = sorted(
+        summaries.keys(), key=lambda a: summaries[a]["avg_score"], reverse=True
+    )
+
+    print("\n" + "=" * 80)
+    print("COMPARISON (with 95% confidence intervals)")
+    print("=" * 80)
+    print(
+        f"{'Rank':<12} {'Agent':<12} {'Avg Score':>10} {'95% CI':>16} {'Avg Tile':>10}"
+    )
+    print("-" * 80)
+
+    for name in sorted_agents:
+        summary = summaries[name]
+        ci = confidence_intervals[name]
+        rank_range = rank_ranges[name]
+        emoji = get_rank_emoji(rank_range)
+        rank_str = f"{emoji} {format_rank_range(rank_range)}".strip()
+        ci_str = f"[{ci[0]:.0f}, {ci[1]:.0f}]"
         print(
-            f"{name:<12} {summary['avg_score']:>10.1f} {summary['max_score']:>10} {summary['avg_max_tile']:>10.1f}"
+            f"{rank_str:<12} {name:<12} {summary['avg_score']:>10.1f} {ci_str:>16} {summary['avg_max_tile']:>10.1f}"
         )
 
 
@@ -207,6 +227,12 @@ def main():
         "--sequential",
         action="store_true",
         help="Force sequential execution (default behavior)",
+    )
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=0.05,
+        help="Significance level for statistical tests (default: 0.05)",
     )
     args = parser.parse_args()
 
@@ -262,11 +288,22 @@ def main():
             all_results[name] = results
 
     if args.json:
+        stats_data = compute_all_statistics(all_results, alpha=args.alpha)
         output_data = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "agents": all_results,
-            "summary": {
-                name: compute_summary(results) for name, results in all_results.items()
+            "summary": stats_data["summaries"],
+            "confidence_intervals": {
+                k: {"lower": v[0], "upper": v[1]}
+                for k, v in stats_data["confidence_intervals"].items()
+            },
+            "rank_ranges": {
+                k: {"min": v[0], "max": v[1], "display": format_rank_range(v)}
+                for k, v in stats_data["rank_ranges"].items()
+            },
+            "statistical_params": {
+                "alpha": args.alpha,
+                "confidence": 0.95,
             },
         }
 
@@ -280,7 +317,7 @@ def main():
     else:
         for name, results in all_results.items():
             print_summary(name, results)
-        print_comparison(all_results)
+        print_comparison(all_results, alpha=args.alpha)
 
 
 if __name__ == "__main__":

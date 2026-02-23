@@ -8,6 +8,7 @@ from typing import Optional
 import numpy as np
 
 from game2048.agents import BaseAgent, register_agent
+from game2048.agents.expectimax_agent import ExpectimaxAgent
 from game2048.agents.mcts_agent import MCTSAgent
 from game2048.game import Game2048
 
@@ -127,12 +128,13 @@ class NeuralNetwork:
 
 def generate_training_data(
     num_samples: int,
-    mcts_simulations: int = 20,
+    teacher: Optional[BaseAgent] = None,
     verbose: bool = True,
     seed: Optional[int] = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     rng = np.random.default_rng(seed)
-    teacher = MCTSAgent(simulations=mcts_simulations)
+    if teacher is None:
+        teacher = ExpectimaxAgent(depth=2)
     samples_per_game = 50
     num_games = max(1, num_samples // samples_per_game)
     X_list: list[np.ndarray] = []
@@ -307,7 +309,7 @@ class ApprenticeAgent(BaseAgent):
     def train(
         self,
         num_samples: int = 20000,
-        mcts_simulations: int = 20,
+        teacher: Optional[BaseAgent] = None,
         hidden_sizes: list[int] = [128, 64],
         epochs: int = 30,
         lr: float = 0.001,
@@ -316,11 +318,14 @@ class ApprenticeAgent(BaseAgent):
         verbose: bool = True,
         seed: Optional[int] = None,
     ) -> dict[str, float]:
+        if teacher is None:
+            teacher = ExpectimaxAgent(depth=2)
         if verbose:
-            print("Phase 1: Generating training data from MCTS...")
+            teacher_name = type(teacher).__name__
+            print(f"Phase 1: Generating training data from {teacher_name}...")
         X, y = generate_training_data(
             num_samples=num_samples,
-            mcts_simulations=mcts_simulations,
+            teacher=teacher,
             verbose=verbose,
             seed=seed,
         )
@@ -358,7 +363,7 @@ class ApprenticeAgent(BaseAgent):
     def from_training(
         cls,
         num_samples: int = 20000,
-        mcts_simulations: int = 20,
+        teacher: Optional[BaseAgent] = None,
         hidden_sizes: list[int] = [128, 64],
         epochs: int = 30,
         lr: float = 0.001,
@@ -369,7 +374,7 @@ class ApprenticeAgent(BaseAgent):
         agent = cls(hidden_sizes=hidden_sizes)
         agent.train(
             num_samples=num_samples,
-            mcts_simulations=mcts_simulations,
+            teacher=teacher,
             hidden_sizes=hidden_sizes,
             epochs=epochs,
             lr=lr,

@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2048 AI Leaderboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --card-bg: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --border-color: #eeeeee;
+            --hover-bg: #f8f9ff;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-gradient: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                --card-bg: #1f1f3a;
+                --text-primary: #e0e0e0;
+                --text-secondary: #a0a0a0;
+                --border-color: #333355;
+                --hover-bg: #2a2a4a;
+            }
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: white;
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            color: rgba(255,255,255,0.9);
+            font-size: 1rem;
+        }
+        
+        .last-updated {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 15px;
+            font-size: 0.85rem;
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        
+        .card h2 {
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.5px;
+        }
+        
+        th:first-child { border-radius: 8px 0 0 0; }
+        th:last-child { border-radius: 0 8px 0 0; }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        
+        tr:hover {
+            background: var(--hover-bg);
+        }
+        
+        .rank {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        
+        .rank-1 { color: #FFD700; }
+        .rank-2 { color: #C0C0C0; }
+        .rank-3 { color: #CD7F32; }
+        
+        .agent-name {
+            font-weight: 600;
+        }
+        
+        .score {
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .loading, .error {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        
+        .error {
+            color: #e74c3c;
+        }
+        
+        .footer {
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            margin-top: 30px;
+            font-size: 0.9rem;
+        }
+        
+        .footer a {
+            color: white;
+            text-decoration: none;
+        }
+        
+        @media (max-width: 768px) {
+            h1 { font-size: 1.6rem; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .chart-container { height: 250px; }
+            .card { padding: 15px; }
+            th, td { padding: 8px; font-size: 0.85rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>2048 AI Leaderboard</h1>
+            <p class="subtitle">Benchmarking AI agents across 50 game seeds</p>
+        </header>
+        
+        <div class="card">
+            <div class="last-updated" id="lastUpdated">Loading...</div>
+            <h2>Leaderboard</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Agent</th>
+                        <th>Avg Score</th>
+                        <th>Max Score</th>
+                        <th>Min Score</th>
+                        <th>Avg Max Tile</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard">
+                    <tr><td colspan="6" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="charts-grid">
+            <div class="card">
+                <h2>Average Scores</h2>
+                <div class="chart-container">
+                    <canvas id="avgScoreChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Score Range</h2>
+                <div class="chart-container">
+                    <canvas id="scoreRangeChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Max Tile Distribution</h2>
+                <div class="chart-container">
+                    <canvas id="maxTileChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Agent Comparison</h2>
+                <div class="chart-container">
+                    <canvas id="radarChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>View source on <a href="https://github.com/openclaw43/2048-leaderboard">GitHub</a></p>
+        </div>
+    </div>
+
+    <script>
+        const DATA_URL = 'https://raw.githubusercontent.com/openclaw43/2048-leaderboard/gh-pages/benchmark_results.json';
+        const LOCAL_URL = '../benchmark_results.json';
+        
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const chartColors = {
+            text: isDark ? '#e0e0e0' : '#666',
+            grid: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+            gold: '#FFD700',
+            silver: '#C0C0C0', 
+            bronze: '#CD7F32',
+            primary: '#667eea',
+            secondary: '#764ba2'
+        };
+        
+        Chart.defaults.color = chartColors.text;
+        Chart.defaults.borderColor = chartColors.grid;
+        
+        let benchmarkData = null;
+        
+        async function loadData() {
+            try {
+                let response = await fetch(DATA_URL);
+                if (!response.ok) {
+                    response = await fetch(LOCAL_URL);
+                }
+                if (!response.ok) throw new Error('Failed to load data');
+                benchmarkData = await response.json();
+                renderLeaderboard();
+                renderCharts();
+            } catch (error) {
+                document.getElementById('leaderboard').innerHTML = 
+                    '<tr><td colspan="6" class="error">Error loading benchmark data</td></tr>';
+                document.getElementById('lastUpdated').textContent = 'Error loading data';
+            }
+        }
+        
+        function renderLeaderboard() {
+            const summary = benchmarkData.summary || {};
+            const sorted = Object.entries(summary).sort((a, b) => b[1].avg_score - a[1].avg_score);
+            
+            const tbody = document.getElementById('leaderboard');
+            tbody.innerHTML = sorted.map(([agent, stats], i) => {
+                const rank = i + 1;
+                return `
+                    <tr>
+                        <td class="rank rank-${rank <= 3 ? rank : ''}">#${rank}</td>
+                        <td class="agent-name">${agent}</td>
+                        <td class="score">${stats.avg_score.toLocaleString()}</td>
+                        <td>${stats.max_score.toLocaleString()}</td>
+                        <td>${stats.min_score.toLocaleString()}</td>
+                        <td>${Math.round(stats.avg_max_tile).toLocaleString()}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            const timestamp = benchmarkData.timestamp 
+                ? new Date(benchmarkData.timestamp).toLocaleString() 
+                : 'Unknown';
+            document.getElementById('lastUpdated').textContent = `Last updated: ${timestamp}`;
+        }
+        
+        function getBarColors(count) {
+            const colors = [];
+            for (let i = 0; i < count; i++) {
+                if (i === 0) colors.push(chartColors.gold);
+                else if (i === 1) colors.push(chartColors.silver);
+                else if (i === 2) colors.push(chartColors.bronze);
+                else colors.push(chartColors.primary);
+            }
+            return colors;
+        }
+        
+        function renderCharts() {
+            const summary = benchmarkData.summary || {};
+            const agents = Object.keys(summary);
+            const sorted = Object.entries(summary).sort((a, b) => b[1].avg_score - a[1].avg_score);
+            const sortedAgents = sorted.map(s => s[0]);
+            
+            new Chart(document.getElementById('avgScoreChart'), {
+                type: 'bar',
+                data: {
+                    labels: sortedAgents,
+                    datasets: [{
+                        label: 'Average Score',
+                        data: sortedAgents.map(a => summary[a].avg_score),
+                        backgroundColor: getBarColors(sortedAgents.length),
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+            
+            new Chart(document.getElementById('scoreRangeChart'), {
+                type: 'line',
+                data: {
+                    labels: sortedAgents,
+                    datasets: [
+                        {
+                            label: 'Max',
+                            data: sortedAgents.map(a => summary[a].max_score),
+                            borderColor: '#27ae60',
+                            backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                            fill: '+1',
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Avg',
+                            data: sortedAgents.map(a => summary[a].avg_score),
+                            borderColor: chartColors.primary,
+                            backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Min',
+                            data: sortedAgents.map(a => summary[a].min_score),
+                            borderColor: '#e74c3c',
+                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                            fill: false,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+            
+            const tileBuckets = { '512+': 0, '256': 0, '128': 0, '64': 0, '<64': 0 };
+            const agentGames = benchmarkData.agents || {};
+            
+            Object.values(agentGames).forEach(games => {
+                games.forEach(game => {
+                    const tile = game.max_tile;
+                    if (tile >= 512) tileBuckets['512+']++;
+                    else if (tile >= 256) tileBuckets['256']++;
+                    else if (tile >= 128) tileBuckets['128']++;
+                    else if (tile >= 64) tileBuckets['64']++;
+                    else tileBuckets['<64']++;
+                });
+            });
+            
+            new Chart(document.getElementById('maxTileChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(tileBuckets),
+                    datasets: [{
+                        data: Object.values(tileBuckets),
+                        backgroundColor: [
+                            '#27ae60', '#3498db', '#9b59b6', '#f39c12', '#e74c3c'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+            
+            const maxScores = Math.max(...Object.values(summary).map(s => s.max_score));
+            const maxTiles = Math.max(...Object.values(summary).map(s => s.avg_max_tile));
+            const maxStd = Math.max(...Object.values(summary).map(s => {
+                const games = agentGames[s] || [];
+                const avg = summary[Object.keys(summary).find(k => {
+                    const agentGames2 = benchmarkData.agents[k];
+                    return agentGames2 === games;
+                })]?.avg_score || 0;
+                const variance = games.reduce((sum, g) => sum + Math.pow(g.score - avg, 2), 0) / games.length;
+                return Math.sqrt(variance);
+            }));
+            
+            const radarData = sortedAgents.map(agent => {
+                const games = benchmarkData.agents[agent] || [];
+                const avg = summary[agent].avg_score;
+                const variance = games.reduce((sum, g) => sum + Math.pow(g.score - avg, 2), 0) / games.length;
+                const stdDev = Math.sqrt(variance);
+                const consistency = maxStd > 0 ? ((maxStd - stdDev) / maxStd) * 100 : 100;
+                const maxTileRate = games.filter(g => g.max_tile >= 2048).length / games.length * 100;
+                
+                return {
+                    label: agent,
+                    data: [
+                        (summary[agent].avg_score / maxScores) * 100,
+                        consistency,
+                        maxTileRate,
+                        (summary[agent].avg_max_tile / maxTiles) * 100
+                    ],
+                    borderColor: agent === sortedAgents[0] ? chartColors.gold : 
+                                 agent === sortedAgents[1] ? chartColors.silver : 
+                                 agent === sortedAgents[2] ? chartColors.bronze : chartColors.primary,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2
+                };
+            });
+            
+            new Chart(document.getElementById('radarChart'), {
+                type: 'radar',
+                data: {
+                    labels: ['Score', 'Consistency', '2048 Rate', 'Max Tile'],
+                    datasets: radarData
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { stepSize: 25 }
+                        }
+                    },
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+        
+        loadData();
+    </script>
+</body>
+</html>

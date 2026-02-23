@@ -10,6 +10,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Optional
 
+import numpy as np
+
 from game2048.agents import (
     BaseAgent,
     CornerAgent,
@@ -152,12 +154,28 @@ def compute_summary(results: list[dict[str, int]]) -> dict[str, float | int]:
 
 def print_summary(name: str, results: list[dict[str, int]]) -> None:
     summary = compute_summary(results)
+    scores = [r["score"] for r in results]
+    moves = [r["moves"] for r in results]
+    std_dev = float(np.std(scores, ddof=1)) if len(scores) > 1 else 0.0
+    median_score = float(np.median(scores)) if scores else 0.0
+    cv = (std_dev / summary["avg_score"] * 100) if summary["avg_score"] > 0 else 0.0
+    reached_2048 = sum(1 for r in results if r["max_tile"] >= 2048)
+    reached_1024 = sum(1 for r in results if r["max_tile"] >= 1024)
+    reached_512 = sum(1 for r in results if r["max_tile"] >= 512)
+    total = len(results)
     print(f"\n{name.upper()}")
     print("-" * 40)
     print(f"  Avg Score:  {summary['avg_score']:.1f}")
+    print(f"  Median:     {median_score:.0f}")
+    print(f"  Std Dev:    {std_dev:.0f}")
     print(f"  Max Score:  {summary['max_score']}")
     print(f"  Min Score:  {summary['min_score']}")
     print(f"  Avg Tile:   {summary['avg_max_tile']:.1f}")
+    print(f"  Avg Moves:  {np.mean(moves):.1f}")
+    print(f"  Consistency (CV): {cv:.1f}%")
+    print(
+        f"  Win Rates:  2048={reached_2048 / total * 100:.0f}%  1024={reached_1024 / total * 100:.0f}%  512={reached_512 / total * 100:.0f}%"
+    )
 
 
 def print_comparison(
@@ -167,28 +185,52 @@ def print_comparison(
     summaries = stats_data["summaries"]
     confidence_intervals = stats_data["confidence_intervals"]
     rank_ranges = stats_data["rank_ranges"]
+    extended = stats_data["extended"]
 
     sorted_agents = sorted(
         summaries.keys(), key=lambda a: summaries[a]["avg_score"], reverse=True
     )
 
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 100)
     print("COMPARISON (with 95% confidence intervals)")
-    print("=" * 80)
+    print("=" * 100)
     print(
-        f"{'Rank':<12} {'Agent':<12} {'Avg Score':>10} {'95% CI':>16} {'Avg Tile':>10}"
+        f"{'Rank':<12} {'Agent':<12} {'Avg Score':>10} {'Median':>8} {'Std Dev':>8} {'95% CI':>18} {'Consistency':>10}"
     )
-    print("-" * 80)
+    print("-" * 100)
 
     for name in sorted_agents:
         summary = summaries[name]
         ci = confidence_intervals[name]
         rank_range = rank_ranges[name]
+        ext = extended[name]
         emoji = get_rank_emoji(rank_range)
         rank_str = f"{emoji} {format_rank_range(rank_range)}".strip()
         ci_str = f"[{ci[0]:.0f}, {ci[1]:.0f}]"
         print(
-            f"{rank_str:<12} {name:<12} {summary['avg_score']:>10.1f} {ci_str:>16} {summary['avg_max_tile']:>10.1f}"
+            f"{rank_str:<12} {name:<12} {summary['avg_score']:>10.1f} {ext['distribution']['median']:>8.0f} {ext['distribution']['std_dev']:>8.0f} {ci_str:>18} {ext['consistency']['coefficient_of_variation']:>9.1f}%"
+        )
+
+    print("\n" + "=" * 80)
+    print("WIN RATES (% reaching tile threshold)")
+    print("=" * 80)
+    print(f"{'Agent':<15} {'2048':>10} {'1024':>10} {'512':>10}")
+    print("-" * 50)
+    for name in sorted_agents:
+        wr = extended[name]["win_rates"]
+        print(
+            f"{name:<15} {wr['reached_2048']:>9.1f}% {wr['reached_1024']:>9.1f}% {wr['reached_512']:>9.1f}%"
+        )
+
+    print("\n" + "=" * 60)
+    print("GAME LENGTH")
+    print("=" * 60)
+    print(f"{'Agent':<15} {'Avg Moves':>10} {'Min':>8} {'Max':>8}")
+    print("-" * 50)
+    for name in sorted_agents:
+        gl = extended[name]["game_length"]
+        print(
+            f"{name:<15} {gl['avg_moves']:>10.1f} {gl['min_moves']:>8} {gl['max_moves']:>8}"
         )
 
 
@@ -303,6 +345,7 @@ def main() -> int:
                 k: {"min": v[0], "max": v[1], "display": format_rank_range(v)}
                 for k, v in stats_data["rank_ranges"].items()
             },
+            "extended": stats_data["extended"],
             "statistical_params": {
                 "alpha": args.alpha,
                 "confidence": 0.95,

@@ -1,12 +1,21 @@
+from __future__ import annotations
+
 import random
 from typing import Optional
+
+from game2048.agents import BaseAgent, register_agent
 from game2048.game import Game2048
-from game2048.agents import register_agent, BaseAgent
 
 
 @register_agent("mcts")
 class MCTSAgent(BaseAgent):
-    def __init__(self, simulations: int = 100, exploration_constant: float = 1.414):
+    simulations: int
+    rollouts_per_move: int
+    max_depth: int
+
+    def __init__(
+        self, simulations: int = 100, exploration_constant: float = 1.414
+    ) -> None:
         self.simulations = simulations
         self.rollouts_per_move = max(1, simulations // 4)
         self.max_depth = 4

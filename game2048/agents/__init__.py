@@ -1,4 +1,7 @@
-from typing import Callable, Dict, Optional, Type
+from __future__ import annotations
+
+from typing import Callable, Dict, Optional, Type, Union
+
 from game2048.game import Game2048
 
 
@@ -8,8 +11,8 @@ AgentFactory = Callable[..., "BaseAgent"]
 _registry: Dict[str, AgentFactory] = {}
 
 
-def register_agent(name: str):
-    def decorator(cls: Type) -> Type:
+def register_agent(name: str) -> Callable[[Type[BaseAgent]], Type[BaseAgent]]:
+    def decorator(cls: Type[BaseAgent]) -> Type[BaseAgent]:
         _registry[name] = cls
         return cls
 
@@ -45,7 +48,7 @@ from game2048.agents.expectimax_agent import ExpectimaxAgent
 from game2048.agents.mcts_agent import MCTSAgent
 from game2048.agents.td_learning_agent import TDLearningAgent
 
-__all__ = [
+__all__: list[str] = [
     "BaseAgent",
     "RandomAgent",
     "RightLeftAgent",

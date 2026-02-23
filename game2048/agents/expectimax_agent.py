@@ -1,19 +1,24 @@
+from __future__ import annotations
+
 import math
-from typing import List, Optional
+from typing import List, Optional, Tuple
+
+from game2048.agents import BaseAgent, register_agent
 from game2048.game import Game2048
-from game2048.agents import register_agent, BaseAgent
 
 
 @register_agent("expectimax")
 class ExpectimaxAgent(BaseAgent):
-    SNAKE_WEIGHTS = [
+    SNAKE_WEIGHTS: List[List[int]] = [
         [15, 14, 13, 12],
         [8, 9, 10, 11],
         [7, 6, 5, 4],
         [0, 1, 2, 3],
     ]
 
-    def __init__(self, depth: int = 2):
+    depth: int
+
+    def __init__(self, depth: int = 2) -> None:
         self.depth = depth
 
     def choose_move(self, game: Game2048) -> Optional[str]:
@@ -21,7 +26,7 @@ class ExpectimaxAgent(BaseAgent):
         if not valid:
             return None
 
-        best_move = None
+        best_move: Optional[str] = None
         best_value = float("-inf")
 
         for move in valid:
@@ -48,7 +53,7 @@ class ExpectimaxAgent(BaseAgent):
             return self._evaluate_max(game, depth)
 
     def _evaluate_chance(self, game: Game2048, depth: int) -> float:
-        empty_cells = [
+        empty_cells: List[Tuple[int, int]] = [
             (i, j) for i in range(4) for j in range(4) if game.grid[i][j] == 0
         ]
         if not empty_cells:

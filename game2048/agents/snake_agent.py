@@ -1,19 +1,22 @@
+from __future__ import annotations
+
 import math
 from typing import Optional
+
+from game2048.agents import BaseAgent, register_agent
 from game2048.game import Game2048
-from game2048.agents import register_agent, BaseAgent
 
 
 @register_agent("snake")
 class SnakeAgent(BaseAgent):
-    SNAKE_WEIGHTS = [
+    SNAKE_WEIGHTS: list[list[int]] = [
         [15, 14, 13, 12],
         [8, 9, 10, 11],
         [7, 6, 5, 4],
         [0, 1, 2, 3],
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
     def evaluate(self, game: Game2048) -> float:
@@ -89,7 +92,7 @@ class SnakeAgent(BaseAgent):
         if not valid:
             return None
 
-        best_move = None
+        best_move: Optional[str] = None
         best_score = float("-inf")
 
         for move in valid:

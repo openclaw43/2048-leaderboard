@@ -1,19 +1,26 @@
+from __future__ import annotations
+
 from typing import List, Optional, Tuple
+
+from game2048.agents import BaseAgent, register_agent
 from game2048.game import Game2048
-from game2048.agents import register_agent, BaseAgent
 
 
 @register_agent("greedy")
 class GreedyAgent(BaseAgent):
-    def __init__(self, tie_breaker: List[str] = None):
-        self.tie_breaker = tie_breaker or ["down", "right", "left", "up"]
+    tie_breaker: List[str]
+
+    def __init__(self, tie_breaker: Optional[List[str]] = None) -> None:
+        self.tie_breaker = (
+            tie_breaker if tie_breaker is not None else ["down", "right", "left", "up"]
+        )
 
     def choose_move(self, game: Game2048) -> Optional[str]:
         valid = game.get_valid_moves()
         if not valid:
             return None
 
-        best_move = None
+        best_move: Optional[str] = None
         best_score = -1
 
         for move in valid:
@@ -52,7 +59,7 @@ class GreedyAgent(BaseAgent):
     def _compress_row(self, row: List[int]) -> Tuple[List[int], int]:
         compressed = [x for x in row if x != 0]
         score = 0
-        result = []
+        result: List[int] = []
         i = 0
         while i < len(compressed):
             if i + 1 < len(compressed) and compressed[i] == compressed[i + 1]:
@@ -68,7 +75,7 @@ class GreedyAgent(BaseAgent):
         return result, score
 
     def _move_left(self, grid: List[List[int]]) -> Tuple[List[List[int]], int, bool]:
-        new_grid = []
+        new_grid: List[List[int]] = []
         total_score = 0
         moved = False
         for row in grid:

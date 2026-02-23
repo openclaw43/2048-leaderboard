@@ -13,5 +13,10 @@ play2048 = "main:main"
 where = ["."]
 include = ["game2048*"]
 
+[tool.mypy]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
 [dependency-groups]
-dev = ["pytest>=8.0.0"]
+dev = ["pytest>=8.0.0", "mypy>=1.8.0"]

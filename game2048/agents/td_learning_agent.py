@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pickle
 import random
 from collections import defaultdict
@@ -10,6 +12,13 @@ from game2048.game import Game2048
 
 @register_agent("td_learning")
 class TDLearningAgent(BaseAgent):
+    alpha: float
+    gamma: float
+    epsilon: float
+    rng: random.Random
+    weights: Dict[Tuple[int, ...], float]
+    patterns: List[List[Tuple[int, int]]]
+
     def __init__(
         self,
         weights_file: Optional[str] = None,
@@ -17,7 +26,7 @@ class TDLearningAgent(BaseAgent):
         gamma: float = 0.99,
         epsilon: float = 0.001,
         seed: Optional[int] = None,
-    ):
+    ) -> None:
         self.alpha = alpha
         self.gamma = gamma
         self.epsilon = epsilon
@@ -29,7 +38,7 @@ class TDLearningAgent(BaseAgent):
             self.load_weights(weights_file)
 
     def _init_patterns(self) -> List[List[Tuple[int, int]]]:
-        patterns = []
+        patterns: List[List[Tuple[int, int]]] = []
 
         for row in range(4):
             patterns.append([(row, col) for col in range(4)])
@@ -40,7 +49,7 @@ class TDLearningAgent(BaseAgent):
         patterns.append([(0, 0), (0, 1), (1, 0), (1, 1)])
         patterns.append([(0, 2), (0, 3), (1, 2), (1, 3)])
         patterns.append([(2, 0), (2, 1), (3, 0), (3, 1)])
-        patterns.append([(2, 2), (2, 3), (3, 2), (3, 3)])
+        patterns.append([(2, 2), (2, 3), (3, 2), (3, 1)])
 
         patterns.append([(0, 0), (0, 1), (0, 2), (1, 2)])
         patterns.append([(0, 3), (0, 2), (0, 1), (1, 1)])
@@ -59,7 +68,7 @@ class TDLearningAgent(BaseAgent):
         return tile.bit_length() - 1
 
     def _extract_features(self, game: Game2048) -> List[Tuple[Tuple[int, ...], float]]:
-        features = []
+        features: List[Tuple[Tuple[int, ...], float]] = []
         for pattern in self.patterns:
             tiles = tuple(self._tile_to_feature(game.grid[r][c]) for r, c in pattern)
             features.append((tiles, 1.0))
@@ -85,7 +94,7 @@ class TDLearningAgent(BaseAgent):
         if self.rng.random() < self.epsilon:
             return self.rng.choice(valid)
 
-        best_move = None
+        best_move: Optional[str] = None
         best_value = float("-inf")
 
         for move in valid:
@@ -115,7 +124,7 @@ class TDLearningAgent(BaseAgent):
         prev_features: List[Tuple[Tuple[int, ...], float]],
         curr_features: List[Tuple[Tuple[int, ...], float]],
         reward: float,
-    ):
+    ) -> None:
         v_prev = self._evaluate_features(prev_features)
         v_curr = self._evaluate_features(curr_features)
         delta = reward + self.gamma * v_curr - v_prev
@@ -127,7 +136,7 @@ class TDLearningAgent(BaseAgent):
 
     def _terminal_update(
         self, features: List[Tuple[Tuple[int, ...], float]], final_score: float
-    ):
+    ) -> None:
         v_curr = self._evaluate_features(features)
         delta = float(final_score) - v_curr
 
@@ -142,12 +151,12 @@ class TDLearningAgent(BaseAgent):
         verbose: bool = True,
         log_interval: int = 1000,
     ) -> Dict[str, float]:
-        scores = []
-        max_tiles = []
+        scores: List[int] = []
+        max_tiles: List[int] = []
 
         for episode in range(1, num_games + 1):
             game = Game2048(seed=None)
-            prev_features = None
+            prev_features: Optional[List[Tuple[Tuple[int, ...], float]]] = None
 
             while not game.game_over:
                 curr_features = self._extract_features(game)
@@ -162,7 +171,8 @@ class TDLearningAgent(BaseAgent):
                     self._td_update(prev_features, curr_features, 0.0)
 
                 prev_features = curr_features
-                game.move(move)
+                if move is not None:
+                    game.move(move)
 
             if prev_features is not None:
                 self._terminal_update(prev_features, game.score)
@@ -184,7 +194,7 @@ class TDLearningAgent(BaseAgent):
             "avg_score": sum(scores) / len(scores),
             "max_score": max(scores),
             "best_tile": max(max_tiles),
-            "weights_count": len(self.weights),
+            "weights_count": float(len(self.weights)),
         }
 
     def _choose_move_training(self, game: Game2048) -> Optional[str]:
@@ -195,7 +205,7 @@ class TDLearningAgent(BaseAgent):
         if self.rng.random() < 0.001:
             return self.rng.choice(valid)
 
-        best_move = None
+        best_move: Optional[str] = None
         best_value = float("-inf")
 
         for move in valid:
@@ -214,7 +224,7 @@ class TDLearningAgent(BaseAgent):
 
         return best_move if best_move else valid[0]
 
-    def save_weights(self, filepath: str):
+    def save_weights(self, filepath: str) -> None:
         path = Path(filepath)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
@@ -241,7 +251,7 @@ def train_td_agent(
     print(f"Average Score: {results['avg_score']:.0f}")
     print(f"Max Score: {results['max_score']}")
     print(f"Best Tile: {results['best_tile']}")
-    print(f"Total Weights: {results['weights_count']}")
+    print(f"Total Weights: {int(results['weights_count'])}")
 
     return agent
 
@@ -250,7 +260,7 @@ if __name__ == "__main__":
     import sys
 
     num_games = int(sys.argv[1]) if len(sys.argv) > 1 else 50000
-    weights_file = sys.argv[2] if len(sys.argv) > 2 else None
+    weights_file: Optional[str] = sys.argv[2] if len(sys.argv) > 2 else None
 
     agent = train_td_agent(num_games=num_games, weights_file=weights_file)
     agent.save_weights("weights/td_learning_weights.pkl")

@@ -1,33 +1,34 @@
 #!/usr/bin/env python3
 """Benchmark 2048 agents across multiple seeds and report statistics."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
-from game2048.game import Game2048
 from game2048.agents import (
-    RandomAgent,
-    RightLeftAgent,
-    RightDownAgent,
-    CornerAgent,
-    GreedyAgent,
-    SnakeAgent,
-    ExpectimaxAgent,
-    MCTSAgent,
-    TDLearningAgent,
     BaseAgent,
+    CornerAgent,
+    ExpectimaxAgent,
+    GreedyAgent,
+    MCTSAgent,
+    RandomAgent,
+    RightDownAgent,
+    RightLeftAgent,
+    SnakeAgent,
+    TDLearningAgent,
 )
+from game2048.game import Game2048
 from game2048.runner import GameRunner
 from game2048.stats import compute_all_statistics, format_rank_range, get_rank_emoji
 
 
-def get_agent_class(name: str) -> Optional[type]:
-    """Get agent class by name."""
-    agents = {
+def get_agent_class(name: str) -> Optional[type[BaseAgent]]:
+    agents: dict[str, type[BaseAgent]] = {
         "random": RandomAgent,
         "rightleft": RightLeftAgent,
         "rightdown": RightDownAgent,
@@ -42,23 +43,28 @@ def get_agent_class(name: str) -> Optional[type]:
 
 
 def create_agent(name: str) -> BaseAgent:
-    """Create an agent instance by name."""
-    agent_classes = {
-        "random": lambda: RandomAgent(seed=42),
-        "rightleft": lambda: RightLeftAgent(),
-        "rightdown": lambda: RightDownAgent(),
-        "corner": lambda: CornerAgent(),
-        "greedy": lambda: GreedyAgent(),
-        "snake": lambda: SnakeAgent(),
-        "expectimax": lambda: ExpectimaxAgent(depth=2),
-        "mcts": lambda: MCTSAgent(simulations=20),
-        "td_learning": lambda: TDLearningAgent(seed=42),
-    }
-    return agent_classes[name]()
+    if name == "random":
+        return RandomAgent(seed=42)
+    elif name == "rightleft":
+        return RightLeftAgent()
+    elif name == "rightdown":
+        return RightDownAgent()
+    elif name == "corner":
+        return CornerAgent()
+    elif name == "greedy":
+        return GreedyAgent()
+    elif name == "snake":
+        return SnakeAgent()
+    elif name == "expectimax":
+        return ExpectimaxAgent(depth=2)
+    elif name == "mcts":
+        return MCTSAgent(simulations=20)
+    elif name == "td_learning":
+        return TDLearningAgent(seed=42)
+    raise ValueError(f"Unknown agent: {name}")
 
 
-def run_game(agent: BaseAgent, seed: int) -> dict:
-    """Run a single game with given agent and seed, return results."""
+def run_game(agent: BaseAgent, seed: int) -> dict[str, int]:
     game = Game2048(seed=seed)
     runner = GameRunner(game, agent.choose_move)
     runner.run()
@@ -73,9 +79,8 @@ def run_game(agent: BaseAgent, seed: int) -> dict:
 
 def benchmark_agent(
     agent: BaseAgent, seeds: range, verbose: bool = False
-) -> list[dict]:
-    """Run benchmark for a single agent across all seeds."""
-    results = []
+) -> list[dict[str, int]]:
+    results: list[dict[str, int]] = []
     for seed in seeds:
         result = run_game(agent, seed)
         results.append(result)
@@ -86,10 +91,11 @@ def benchmark_agent(
     return results
 
 
-def benchmark_agent_worker(agent_name: str, seeds: list[int]) -> tuple[str, list[dict]]:
-    """Worker function for parallel benchmarking - creates agent and runs games."""
+def benchmark_agent_worker(
+    agent_name: str, seeds: list[int]
+) -> tuple[str, list[dict[str, int]]]:
     agent = create_agent(agent_name)
-    results = []
+    results: list[dict[str, int]] = []
     for seed in seeds:
         result = run_game(agent, seed)
         results.append(result)
@@ -101,13 +107,12 @@ def run_parallel_benchmarks(
     seeds: range,
     max_workers: Optional[int] = None,
     verbose: bool = False,
-) -> dict[str, list[dict]]:
-    """Run all agents in parallel using ProcessPoolExecutor."""
+) -> dict[str, list[dict[str, int]]]:
     if max_workers is None:
         max_workers = min(len(agent_names), mp.cpu_count())
 
     seeds_list = list(seeds)
-    all_results: dict[str, list[dict]] = {}
+    all_results: dict[str, list[dict[str, int]]] = {}
 
     if verbose:
         print(
@@ -134,8 +139,7 @@ def run_parallel_benchmarks(
     return all_results
 
 
-def compute_summary(results: list[dict]) -> dict:
-    """Compute summary statistics for a set of results."""
+def compute_summary(results: list[dict[str, int]]) -> dict[str, float | int]:
     scores = [r["score"] for r in results]
     max_tiles = [r["max_tile"] for r in results]
     return {
@@ -146,8 +150,7 @@ def compute_summary(results: list[dict]) -> dict:
     }
 
 
-def print_summary(name: str, results: list[dict]) -> None:
-    """Print summary statistics for an agent."""
+def print_summary(name: str, results: list[dict[str, int]]) -> None:
     summary = compute_summary(results)
     print(f"\n{name.upper()}")
     print("-" * 40)
@@ -157,10 +160,9 @@ def print_summary(name: str, results: list[dict]) -> None:
     print(f"  Avg Tile:   {summary['avg_max_tile']:.1f}")
 
 
-def print_comparison(all_results: dict[str, list[dict]], alpha: float = 0.05) -> None:
-    """Print comparison table of all agents with statistical analysis."""
-    from game2048.stats import compute_all_statistics, format_rank_range, get_rank_emoji
-
+def print_comparison(
+    all_results: dict[str, list[dict[str, int]]], alpha: float = 0.05
+) -> None:
     stats_data = compute_all_statistics(all_results, alpha=alpha)
     summaries = stats_data["summaries"]
     confidence_intervals = stats_data["confidence_intervals"]
@@ -190,7 +192,7 @@ def print_comparison(all_results: dict[str, list[dict]], alpha: float = 0.05) ->
         )
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark 2048 agents")
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument(
@@ -238,7 +240,7 @@ def main():
 
     seeds = range(1, args.seeds + 1)
 
-    all_agents = {
+    all_agents: dict[str, BaseAgent] = {
         "random": RandomAgent(seed=42),
         "rightleft": RightLeftAgent(),
         "rightdown": RightDownAgent(),
@@ -261,7 +263,7 @@ def main():
     else:
         agents = all_agents
 
-    all_results: dict[str, list[dict]] = {}
+    all_results: dict[str, list[dict[str, int]]] = {}
     use_parallel = args.parallel or args.jobs is not None
     if args.sequential:
         use_parallel = False
@@ -290,7 +292,7 @@ def main():
     if args.json:
         stats_data = compute_all_statistics(all_results, alpha=args.alpha)
         output_data = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "agents": all_results,
             "summary": stats_data["summaries"],
             "confidence_intervals": {
@@ -319,6 +321,8 @@ def main():
             print_summary(name, results)
         print_comparison(all_results, alpha=args.alpha)
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,14 +1,22 @@
-from typing import Callable, Optional
+from __future__ import annotations
+
+from typing import Callable, Dict, Optional
+
 from game2048.game import Game2048
 
 
 class GameRunner:
+    game: Game2048
+    choose_move: Callable[[Game2048], Optional[str]]
+    verbose: bool
+    moves: int
+
     def __init__(
         self,
         game: Game2048,
         choose_move: Callable[[Game2048], Optional[str]],
         verbose: bool = False,
-    ):
+    ) -> None:
         self.game = game
         self.choose_move = choose_move
         self.verbose = verbose
@@ -31,7 +39,7 @@ class GameRunner:
 
         return self.game.score
 
-    def get_results(self) -> dict:
+    def get_results(self) -> Dict[str, int | bool]:
         return {
             "score": self.game.score,
             "max_tile": self.game.get_max_tile(),

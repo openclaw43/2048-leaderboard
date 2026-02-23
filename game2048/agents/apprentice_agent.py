@@ -13,12 +13,19 @@ from game2048.game import Game2048
 
 
 def encode_board(grid: list[list[int]]) -> np.ndarray:
-    features = np.zeros(16, dtype=np.float32)
+    features = np.zeros(64, dtype=np.float32)
     for i in range(4):
         for j in range(4):
             val = grid[i][j]
             if val > 0:
-                features[i * 4 + j] = min(np.log2(val) / 11.0, 1.0)
+                log_val = int(np.log2(val))
+                features[i * 16 + j * 4 + min(log_val, 3)] = 1.0
+                if log_val >= 4:
+                    features[16 + i * 12 + j * 3 + min(log_val - 4, 2)] = 1.0
+                    if log_val >= 7:
+                        features[28 + i * 8 + j * 2 + min(log_val - 7, 1)] = 1.0
+                        if log_val >= 9:
+                            features[44 + i * 4 + j] = min(log_val - 9, 3) / 3.0
     return features
 
 

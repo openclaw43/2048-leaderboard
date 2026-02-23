@@ -5,7 +5,7 @@ import pickle
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 
@@ -32,6 +32,64 @@ def encode_board(grid: list[list[int]]) -> np.ndarray:
                         features[28 + i * 8 + j * 2 + min(log_val - 7, 1)] = 1.0
                         if log_val >= 9:
                             features[44 + i * 4 + j] = min(log_val - 9, 3) / 3.0
+    return features
+
+
+def encode_board_v2(grid: list[list[int]]) -> np.ndarray:
+    features = np.zeros(26, dtype=np.float32)
+    idx = 0
+    for i in range(4):
+        for j in range(4):
+            val = grid[i][j]
+            features[idx] = (np.log2(val) / 15.0) if val > 0 else 0.0
+            idx += 1
+    empty_count = sum(1 for row in grid for cell in row if cell == 0)
+    features[idx] = empty_count / 16.0
+    idx += 1
+    mono_scores = [0.0, 0.0, 0.0, 0.0]
+    for i in range(4):
+        for j in range(3):
+            current = grid[i][j]
+            next_val = grid[i][j + 1]
+            curr_log = np.log2(current) if current > 0 else 0.0
+            next_log = np.log2(next_val) if next_val > 0 else 0.0
+            if current > next_val and next_val > 0:
+                mono_scores[0] += curr_log - next_log
+            elif next_val > current and current > 0:
+                mono_scores[1] += next_log - curr_log
+    for j in range(4):
+        for i in range(3):
+            current = grid[i][j]
+            next_val = grid[i + 1][j]
+            curr_log = np.log2(current) if current > 0 else 0.0
+            next_log = np.log2(next_val) if next_val > 0 else 0.0
+            if current > next_val and next_val > 0:
+                mono_scores[2] += curr_log - next_log
+            elif next_val > current and current > 0:
+                mono_scores[3] += next_log - curr_log
+    for score in mono_scores:
+        features[idx] = score / 20.0
+        idx += 1
+    smoothness = 0.0
+    for i in range(4):
+        for j in range(4):
+            if grid[i][j] != 0:
+                val = np.log2(grid[i][j])
+                if j < 3 and grid[i][j + 1] != 0:
+                    smoothness -= abs(val - np.log2(grid[i][j + 1]))
+                if i < 3 and grid[i + 1][j] != 0:
+                    smoothness -= abs(val - np.log2(grid[i + 1][j]))
+    features[idx] = smoothness / 20.0
+    idx += 1
+    corners = [
+        (0, 0),
+        (0, 3),
+        (3, 0),
+        (3, 3),
+    ]
+    for ci, cj in corners:
+        features[idx] = 1.0 if grid[ci][cj] > 0 else 0.0
+        idx += 1
     return features
 
 
@@ -136,7 +194,10 @@ def generate_training_data(
     teacher: Optional[BaseAgent] = None,
     verbose: bool = True,
     seed: Optional[int] = None,
+    encode_func: Optional[Callable[[list[list[int]]], np.ndarray]] = None,
 ) -> tuple[np.ndarray, np.ndarray]:
+    if encode_func is None:
+        encode_func = encode_board
     rng = np.random.default_rng(seed)
     if teacher is None:
         teacher = ExpectimaxAgent(depth=2)
@@ -156,7 +217,7 @@ def generate_training_data(
             move = teacher.choose_move(game)
             if move is None:
                 break
-            X_list.append(encode_board(game.grid))
+            X_list.append(encode_func(game.grid))
             y_onehot = np.zeros(4, dtype=np.float32)
             y_onehot[encode_move(move)] = 1.0
             y_list.append(y_onehot)
@@ -426,14 +487,17 @@ class ApprenticeAgent(BaseAgent):
     network: Optional[NeuralNetwork]
     model_path: Optional[str]
     inference_times: list[float]
+    encode_func: Callable[[list[list[int]]], np.ndarray]
 
     def __init__(
         self,
         model_path: Optional[str] = None,
         hidden_sizes: list[int] = [128, 128, 128],
+        encoding_version: int = 2,
     ) -> None:
         self.model_path = model_path
         self.inference_times = []
+        self.encode_func = encode_board_v2 if encoding_version == 2 else encode_board
         default_model = Path(__file__).parent / "apprentice_model.pkl"
         if model_path:
             if Path(model_path).exists():
@@ -454,7 +518,7 @@ class ApprenticeAgent(BaseAgent):
         if self.network is None:
             return valid_moves[0]
         start_time = time.perf_counter()
-        features = encode_board(game.grid)
+        features = self.encode_func(game.grid)
         predictions = self.network.predict(features)
         move_scores = {move: predictions[encode_move(move)] for move in valid_moves}
         best_move = valid_moves[0]
@@ -485,9 +549,11 @@ class ApprenticeAgent(BaseAgent):
         seed: Optional[int] = None,
         patience: int = 5,
         save_logs: bool = True,
+        encoding_version: int = 2,
     ) -> dict[str, Any]:
         if teacher is None:
             teacher = ExpectimaxAgent(depth=2)
+        self.encode_func = encode_board_v2 if encoding_version == 2 else encode_board
         if verbose:
             teacher_name = type(teacher).__name__
             print(f"Phase 1: Generating training data from {teacher_name}...")
@@ -496,6 +562,7 @@ class ApprenticeAgent(BaseAgent):
             teacher=teacher,
             verbose=verbose,
             seed=seed,
+            encode_func=self.encode_func,
         )
         log_dir: Optional[Path] = None
         if save_logs:
@@ -551,8 +618,9 @@ class ApprenticeAgent(BaseAgent):
         seed: Optional[int] = None,
         patience: int = 5,
         save_logs: bool = True,
+        encoding_version: int = 2,
     ) -> "ApprenticeAgent":
-        agent = cls(hidden_sizes=hidden_sizes)
+        agent = cls(hidden_sizes=hidden_sizes, encoding_version=encoding_version)
         agent.train(
             num_samples=num_samples,
             teacher=teacher,
@@ -564,5 +632,6 @@ class ApprenticeAgent(BaseAgent):
             seed=seed,
             patience=patience,
             save_logs=save_logs,
+            encoding_version=encoding_version,
         )
         return agent

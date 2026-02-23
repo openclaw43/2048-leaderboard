@@ -27,3 +27,4 @@ env/
 venv/
 ENV/
 *.pkl
+.training_logs/

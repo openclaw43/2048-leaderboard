@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import pickle
 import time
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -11,6 +13,9 @@ from game2048.agents import BaseAgent, register_agent
 from game2048.agents.expectimax_agent import ExpectimaxAgent
 from game2048.agents.mcts_agent import MCTSAgent
 from game2048.game import Game2048
+
+
+TRAINING_LOGS_DIR = Path(__file__).parent.parent.parent / ".training_logs"
 
 
 def encode_board(grid: list[list[int]]) -> np.ndarray:
@@ -171,6 +176,117 @@ def generate_training_data(
     return X, y
 
 
+def _save_training_artifacts(
+    history: dict[str, list[float]],
+    sample_predictions: list[dict[str, Any]],
+    log_dir: Path,
+    stopped_early: bool,
+    best_epoch: int,
+) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    history_data = {
+        "train_loss": history["train_loss"],
+        "val_loss": history["val_loss"],
+        "val_accuracy": history["val_accuracy"],
+        "epochs_completed": len(history["train_loss"]),
+        "stopped_early": stopped_early,
+        "best_epoch": best_epoch,
+        "best_val_accuracy": max(history["val_accuracy"]),
+    }
+    with open(log_dir / "training_history.json", "w") as f:
+        json.dump(history_data, f, indent=2)
+    with open(log_dir / "sample_predictions.json", "w") as f:
+        json.dump(sample_predictions, f, indent=2)
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        epochs = list(range(1, len(history["train_loss"]) + 1))
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+        ax1 = axes[0]
+        ax1.plot(epochs, history["train_loss"], "b-", label="Train Loss", linewidth=2)
+        ax1.plot(epochs, history["val_loss"], "r-", label="Val Loss", linewidth=2)
+        ax1.axvline(
+            x=best_epoch + 1,
+            color="g",
+            linestyle="--",
+            label=f"Best (epoch {best_epoch + 1})",
+        )
+        ax1.set_xlabel("Epoch")
+        ax1.set_ylabel("Loss")
+        ax1.set_title("Training and Validation Loss")
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        ax2 = axes[1]
+        ax2.plot(
+            epochs,
+            [a * 100 for a in history["val_accuracy"]],
+            "g-",
+            label="Val Accuracy",
+            linewidth=2,
+        )
+        ax2.axvline(
+            x=best_epoch + 1,
+            color="g",
+            linestyle="--",
+            label=f"Best (epoch {best_epoch + 1})",
+        )
+        ax2.axhline(
+            y=max(history["val_accuracy"]) * 100, color="gray", linestyle=":", alpha=0.5
+        )
+        ax2.set_xlabel("Epoch")
+        ax2.set_ylabel("Accuracy (%)")
+        ax2.set_title("Validation Accuracy")
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        if stopped_early:
+            fig.suptitle(
+                f"Training Curves (Early Stopped at Epoch {len(epochs)})",
+                fontsize=12,
+                y=1.02,
+            )
+        else:
+            fig.suptitle(f"Training Curves ({len(epochs)} Epochs)", fontsize=12, y=1.02)
+        plt.tight_layout()
+        plt.savefig(log_dir / "training_curves.png", dpi=150, bbox_inches="tight")
+        plt.close()
+    except ImportError:
+        pass
+
+
+def _display_sample_predictions(
+    network: NeuralNetwork, X_val: np.ndarray, y_val: np.ndarray, num_samples: int = 5
+) -> list[dict[str, Any]]:
+    predictions = []
+    indices = np.random.choice(len(X_val), min(num_samples, len(X_val)), replace=False)
+    for idx in indices:
+        pred = network.predict(X_val[idx])
+        pred_move = np.argmax(pred)
+        actual_move = np.argmax(y_val[idx])
+        pred_label = decode_move(int(pred_move))
+        actual_label = decode_move(int(actual_move))
+        confidence = float(pred[pred_move])
+        is_correct = bool(pred_move == actual_move)
+        predictions.append(
+            {
+                "sample_idx": int(idx),
+                "predicted": pred_label,
+                "actual": actual_label,
+                "confidence": round(confidence, 4),
+                "correct": is_correct,
+                "probabilities": {
+                    "up": round(float(pred[0]), 4),
+                    "down": round(float(pred[1]), 4),
+                    "left": round(float(pred[2]), 4),
+                    "right": round(float(pred[3]), 4),
+                },
+            }
+        )
+    return predictions
+
+
 def train_network(
     X: np.ndarray,
     y: np.ndarray,
@@ -181,7 +297,9 @@ def train_network(
     val_split: float = 0.2,
     verbose: bool = True,
     seed: Optional[int] = None,
-) -> tuple[NeuralNetwork, dict[str, float]]:
+    patience: int = 5,
+    log_dir: Optional[Path] = None,
+) -> tuple[NeuralNetwork, dict[str, Any]]:
     rng = np.random.default_rng(seed)
     indices = np.random.permutation(len(X))
     val_size = int(len(X) * val_split)
@@ -196,11 +314,17 @@ def train_network(
     best_val_acc = 0.0
     best_weights: Optional[list[np.ndarray]] = None
     best_biases: Optional[list[np.ndarray]] = None
-    history: dict[str, float] = {"val_accuracy": 0.0, "train_loss": 0.0}
-    avg_loss = 0.0
+    best_epoch = 0
+    epochs_without_improvement = 0
+    history: dict[str, list[float]] = {
+        "train_loss": [],
+        "val_loss": [],
+        "val_accuracy": [],
+    }
     velocity_w = [np.zeros_like(w) for w in network.weights]
     velocity_b = [np.zeros_like(b) for b in network.biases]
     momentum = 0.9
+    stopped_early = False
     for epoch in range(epochs):
         current_lr = lr * (0.95 ** (epoch // 10))
         perm = np.random.permutation(len(X_train))
@@ -232,7 +356,8 @@ def train_network(
                 network.biases[k] += velocity_b[k]
             total_loss += batch_loss / batch_size_actual
             num_batches += 1
-        avg_loss = total_loss / num_batches if num_batches > 0 else 0
+        avg_train_loss = total_loss / num_batches if num_batches > 0 else 0
+        val_loss = 0.0
         correct = 0
         for i in range(len(X_val)):
             pred = network.predict(X_val[i])
@@ -240,21 +365,60 @@ def train_network(
             actual_move = np.argmax(y_val[i])
             if pred_move == actual_move:
                 correct += 1
+            val_loss += network.cross_entropy_loss(
+                pred.reshape(-1, 1), y_val[i].reshape(-1, 1)
+            )
+        avg_val_loss = val_loss / len(X_val) if len(X_val) > 0 else 0
         val_acc = correct / len(X_val) if len(X_val) > 0 else 0
+        history["train_loss"].append(avg_train_loss)
+        history["val_loss"].append(avg_val_loss)
+        history["val_accuracy"].append(val_acc)
+        if verbose:
+            marker = "*" if val_acc > best_val_acc else ""
+            print(
+                f"  Epoch {epoch + 1}/{epochs}: loss={avg_train_loss:.4f}, "
+                f"val_loss={avg_val_loss:.4f}, val_acc={val_acc:.2%}{marker}"
+            )
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             best_weights = [w.copy() for w in network.weights]
             best_biases = [b.copy() for b in network.biases]
-        if verbose and (epoch + 1) % 5 == 0:
-            print(
-                f"  Epoch {epoch + 1}/{epochs}: loss={avg_loss:.4f}, val_acc={val_acc:.2%}"
-            )
+            best_epoch = epoch
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= patience:
+                if verbose:
+                    print(f"  Early stopping: no improvement for {patience} epochs")
+                stopped_early = True
+                break
     if best_weights is not None and best_biases is not None:
         network.weights = best_weights
         network.biases = best_biases
-    history["val_accuracy"] = best_val_acc
-    history["train_loss"] = avg_loss
-    return network, history
+    sample_predictions = _display_sample_predictions(
+        network, X_val, y_val, num_samples=5
+    )
+    if verbose:
+        print("\n  Sample Predictions:")
+        for p in sample_predictions:
+            status = "OK" if p["correct"] else "WRONG"
+            print(
+                f"    [{status}] Predicted: {p['predicted']:5s} | "
+                f"Actual: {p['actual']:5s} | Conf: {p['confidence']:.2%}"
+            )
+    result: dict[str, Any] = {
+        "val_accuracy": best_val_acc,
+        "train_loss": history["train_loss"][-1] if history["train_loss"] else 0.0,
+        "history": history,
+        "stopped_early": stopped_early,
+        "best_epoch": best_epoch,
+        "sample_predictions": sample_predictions,
+    }
+    if log_dir is not None:
+        _save_training_artifacts(
+            history, sample_predictions, log_dir, stopped_early, best_epoch
+        )
+    return network, result
 
 
 @register_agent("apprentice")
@@ -264,7 +428,9 @@ class ApprenticeAgent(BaseAgent):
     inference_times: list[float]
 
     def __init__(
-        self, model_path: Optional[str] = None, hidden_sizes: list[int] = [128, 128, 128]
+        self,
+        model_path: Optional[str] = None,
+        hidden_sizes: list[int] = [128, 128, 128],
     ) -> None:
         self.model_path = model_path
         self.inference_times = []
@@ -317,7 +483,9 @@ class ApprenticeAgent(BaseAgent):
         val_split: float = 0.2,
         verbose: bool = True,
         seed: Optional[int] = None,
-    ) -> dict[str, float]:
+        patience: int = 5,
+        save_logs: bool = True,
+    ) -> dict[str, Any]:
         if teacher is None:
             teacher = ExpectimaxAgent(depth=2)
         if verbose:
@@ -329,7 +497,13 @@ class ApprenticeAgent(BaseAgent):
             verbose=verbose,
             seed=seed,
         )
-        if verbose:
+        log_dir: Optional[Path] = None
+        if save_logs:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_dir = TRAINING_LOGS_DIR / timestamp
+            if verbose:
+                print(f"Phase 2: Training neural network (logs: {log_dir})...")
+        elif verbose:
             print("Phase 2: Training neural network...")
         self.network, history = train_network(
             X,
@@ -341,11 +515,16 @@ class ApprenticeAgent(BaseAgent):
             val_split=val_split,
             verbose=verbose,
             seed=seed,
+            patience=patience,
+            log_dir=log_dir,
         )
         if verbose:
+            early_stop_info = " (early stopped)" if history.get("stopped_early") else ""
             print(
-                f"Training complete. Best validation accuracy: {history['val_accuracy']:.2%}"
+                f"Training complete{early_stop_info}. Best validation accuracy: {history['val_accuracy']:.2%}"
             )
+            if log_dir:
+                print(f"Diagnostics saved to: {log_dir}")
         return history
 
     def save_model(self, path: str) -> None:
@@ -370,6 +549,8 @@ class ApprenticeAgent(BaseAgent):
         batch_size: int = 64,
         verbose: bool = True,
         seed: Optional[int] = None,
+        patience: int = 5,
+        save_logs: bool = True,
     ) -> "ApprenticeAgent":
         agent = cls(hidden_sizes=hidden_sizes)
         agent.train(
@@ -381,5 +562,7 @@ class ApprenticeAgent(BaseAgent):
             batch_size=batch_size,
             verbose=verbose,
             seed=seed,
+            patience=patience,
+            save_logs=save_logs,
         )
         return agent

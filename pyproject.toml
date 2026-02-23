@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "2048 game with random agent and leaderboard support"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["scipy>=1.11.0"]
 
 [project.scripts]
 play2048 = "main:main"

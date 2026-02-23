@@ -1,15 +1,22 @@
+from __future__ import annotations
+
 import random
 from typing import List, Optional, Tuple
 
 
 class Game2048:
-    UP = "up"
-    DOWN = "down"
-    LEFT = "left"
-    RIGHT = "right"
-    MOVES = [UP, DOWN, LEFT, RIGHT]
+    UP: str = "up"
+    DOWN: str = "down"
+    LEFT: str = "left"
+    RIGHT: str = "right"
+    MOVES: List[str] = [UP, DOWN, LEFT, RIGHT]
 
-    def __init__(self, seed: Optional[int] = None):
+    rng: random.Random
+    grid: List[List[int]]
+    score: int
+    game_over: bool
+
+    def __init__(self, seed: Optional[int] = None) -> None:
         self.rng = random.Random(seed)
         self.grid = [[0] * 4 for _ in range(4)]
         self.score = 0
@@ -18,7 +25,7 @@ class Game2048:
         self._add_random_tile()
 
     def _add_random_tile(self) -> bool:
-        empty_cells = [
+        empty_cells: List[Tuple[int, int]] = [
             (i, j) for i in range(4) for j in range(4) if self.grid[i][j] == 0
         ]
         if not empty_cells:
@@ -30,7 +37,7 @@ class Game2048:
     def _compress_row(self, row: List[int]) -> Tuple[List[int], int]:
         compressed = [x for x in row if x != 0]
         score = 0
-        result = []
+        result: List[int] = []
         i = 0
         while i < len(compressed):
             if i + 1 < len(compressed) and compressed[i] == compressed[i + 1]:
@@ -46,7 +53,7 @@ class Game2048:
         return result, score
 
     def _move_left(self) -> Tuple[List[List[int]], int, bool]:
-        new_grid = []
+        new_grid: List[List[int]] = []
         total_score = 0
         moved = False
         for row in self.grid:
@@ -66,6 +73,10 @@ class Game2048:
     def move(self, direction: str) -> bool:
         if self.game_over or direction not in self.MOVES:
             return False
+
+        new_grid: List[List[int]] = []
+        score = 0
+        moved = False
 
         if direction == self.LEFT:
             new_grid, score, moved = self._move_left()
@@ -115,24 +126,22 @@ class Game2048:
         old_score = self.score
         old_game_over = self.game_over
 
+        moved = False
+
         if direction == self.LEFT:
-            new_grid, _, moved = self._move_left()
+            _, _, moved = self._move_left()
         elif direction == self.RIGHT:
             self.grid = self._reverse_rows(self.grid)
-            new_grid, _, moved = self._move_left()
-            new_grid = self._reverse_rows(new_grid)
+            _, _, moved = self._move_left()
             self.grid = self._reverse_rows(self.grid)
         elif direction == self.UP:
             self.grid = self._transpose(self.grid)
-            new_grid, _, moved = self._move_left()
-            new_grid = self._transpose(new_grid)
+            _, _, moved = self._move_left()
             self.grid = self._transpose(self.grid)
         elif direction == self.DOWN:
             self.grid = self._transpose(self.grid)
             self.grid = self._reverse_rows(self.grid)
-            new_grid, _, moved = self._move_left()
-            new_grid = self._reverse_rows(new_grid)
-            new_grid = self._transpose(new_grid)
+            _, _, moved = self._move_left()
             self.grid = self._reverse_rows(self.grid)
             self.grid = self._transpose(self.grid)
 
@@ -144,7 +153,7 @@ class Game2048:
     def get_max_tile(self) -> int:
         return max(max(row) for row in self.grid)
 
-    def clone(self) -> "Game2048":
+    def clone(self) -> Game2048:
         new_game = Game2048.__new__(Game2048)
         new_game.rng = random.Random()
         new_game.rng.setstate(self.rng.getstate())

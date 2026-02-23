@@ -1,11 +1,17 @@
-from typing import Optional
+from __future__ import annotations
+
+from typing import List, Optional
+
+from game2048.agents import BaseAgent, register_agent
 from game2048.game import Game2048
-from game2048.agents import register_agent, BaseAgent
 
 
 @register_agent("corner")
 class CornerAgent(BaseAgent):
-    def __init__(self, corner: str = "bottom-right"):
+    corner: str
+    preferred: List[str]
+
+    def __init__(self, corner: str = "bottom-right") -> None:
         self.corner = corner
         self.preferred = ["down", "right", "left", "up"]
 

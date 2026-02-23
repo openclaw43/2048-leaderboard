@@ -1,0 +1,45 @@
+name: Type Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'game2048/**/*.py'
+      - 'benchmark.py'
+      - 'main.py'
+      - 'test_game.py'
+      - 'scripts/*.py'
+      - 'pyproject.toml'
+      - '.github/workflows/typecheck.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'game2048/**/*.py'
+      - 'benchmark.py'
+      - 'main.py'
+      - 'test_game.py'
+      - 'scripts/*.py'
+      - 'pyproject.toml'
+      - '.github/workflows/typecheck.yml'
+
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: 'latest'
+      
+      - name: Install dependencies
+        run: uv sync
+      
+      - name: Run mypy
+        run: uv run mypy --strict game2048/ benchmark.py main.py test_game.py scripts/implement_issue.py

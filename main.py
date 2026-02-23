@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
-from game2048.game import Game2048
+
 from game2048.agents import get_agent, list_agents
+from game2048.game import Game2048
+from game2048.runner import GameRunner
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Play 2048 with an agent")
     parser.add_argument(
         "--agent",
@@ -31,8 +35,6 @@ def main():
         agent = agent_factory(seed=args.seed)
     else:
         agent = agent_factory()
-
-    from game2048.runner import GameRunner
 
     runner = GameRunner(game, agent.choose_move, verbose=args.verbose)
     runner.run()

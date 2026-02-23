@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 from typing import Optional
+
+from game2048.agents import BaseAgent, register_agent
 from game2048.game import Game2048
-from game2048.agents import register_agent, BaseAgent
 
 
 @register_agent("rightleft")
 class RightLeftAgent(BaseAgent):
-    def __init__(self):
+    prefer_right: bool
+
+    def __init__(self) -> None:
         self.prefer_right = True
 
     def choose_move(self, game: Game2048) -> Optional[str]:

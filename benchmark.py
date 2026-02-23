@@ -13,6 +13,7 @@ from typing import Optional
 import numpy as np
 
 from game2048.agents import (
+    ApprenticeAgent,
     BaseAgent,
     CornerAgent,
     ExpectimaxAgent,
@@ -40,6 +41,7 @@ def get_agent_class(name: str) -> Optional[type[BaseAgent]]:
         "expectimax": ExpectimaxAgent,
         "mcts": MCTSAgent,
         "td_learning": TDLearningAgent,
+        "apprentice": ApprenticeAgent,
     }
     return agents.get(name)
 
@@ -63,6 +65,8 @@ def create_agent(name: str) -> BaseAgent:
         return MCTSAgent(simulations=20)
     elif name == "td_learning":
         return TDLearningAgent(seed=42)
+    elif name == "apprentice":
+        return ApprenticeAgent()
     raise ValueError(f"Unknown agent: {name}")
 
 
@@ -292,6 +296,7 @@ def main() -> int:
         "expectimax": ExpectimaxAgent(depth=2),
         "mcts": MCTSAgent(simulations=20),
         "td_learning": TDLearningAgent(seed=42),
+        "apprentice": ApprenticeAgent(),
     }
 
     if args.agents:

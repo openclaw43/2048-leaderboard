@@ -48,7 +48,7 @@ from game2048.agents.expectimax_agent import ExpectimaxAgent
 from game2048.agents.mcts_agent import MCTSAgent
 from game2048.agents.td_learning_agent import TDLearningAgent
 from game2048.agents.apprentice_agent import ApprenticeAgent
-from game2048.agents.llm_agent import LLMAgent
+from game2048.agents.llm_agent import LLMAgent, LLMHistoryAgent
 
 __all__: list[str] = [
     "BaseAgent",
@@ -63,6 +63,7 @@ __all__: list[str] = [
     "TDLearningAgent",
     "ApprenticeAgent",
     "LLMAgent",
+    "LLMHistoryAgent",
     "register_agent",
     "get_agent",
     "list_agents",

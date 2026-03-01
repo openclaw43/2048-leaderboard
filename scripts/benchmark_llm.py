@@ -10,12 +10,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from game2048.agents import LLMAgent
+from game2048.agents import LLMAgent, LLMHistoryAgent
 from game2048.game import Game2048
 from game2048.runner import GameRunner
 
 
-def run_game(agent: LLMAgent, seed: int, verbose: bool = False) -> dict[str, int]:
+def run_game(
+    agent: LLMAgent | LLMHistoryAgent, seed: int, verbose: bool = False
+) -> dict[str, int]:
     game = Game2048(seed=seed)
     runner = GameRunner(game, agent.choose_move)
     runner.run()
@@ -56,6 +58,17 @@ def main() -> int:
     parser.add_argument(
         "--start-seed", type=int, default=1, help="Starting seed (default: 1)"
     )
+    parser.add_argument(
+        "--history",
+        action="store_true",
+        help="Use LLMHistoryAgent with game history tracking",
+    )
+    parser.add_argument(
+        "--history-size",
+        type=int,
+        default=5,
+        help="History size for LLMHistoryAgent (default: 5)",
+    )
     args = parser.parse_args()
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -66,7 +79,10 @@ def main() -> int:
         )
         return 1
 
-    print(f"Benchmarking LLM agent with model: {args.model}")
+    agent_type = "LLMHistoryAgent" if args.history else "LLMAgent"
+    print(f"Benchmarking {agent_type} with model: {args.model}")
+    if args.history:
+        print(f"History size: {args.history_size}")
     print(f"Running {args.games} games...")
     print("=" * 60)
 
@@ -77,7 +93,13 @@ def main() -> int:
 
     for i in range(args.games):
         seed = args.start_seed + i
-        agent = LLMAgent(model=args.model, api_key=api_key)
+        agent: LLMAgent | LLMHistoryAgent
+        if args.history:
+            agent = LLMHistoryAgent(
+                model=args.model, api_key=api_key, history_size=args.history_size
+            )
+        else:
+            agent = LLMAgent(model=args.model, api_key=api_key)
         result = run_game(agent, seed, verbose=args.verbose)
         results.append(result)
 

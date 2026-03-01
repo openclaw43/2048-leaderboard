@@ -30,6 +30,7 @@ class LLMAgent(BaseAgent):
         api_key: Optional[str] = None,
         base_url: str = "https://openrouter.ai/api/v1",
         seed: Optional[int] = None,
+        **kwargs: object,
     ) -> None:
         key = api_key or os.environ.get("OPENROUTER_API_KEY")
         if not key:
@@ -169,3 +170,120 @@ Which move should I make next? Respond in JSON format:
             if self.move_count > 0
             else 0.0,
         }
+
+
+@register_agent("llm_history")
+class LLMHistoryAgent(LLMAgent):
+    state_history: list[tuple[list[list[int]], str, int]]
+    history_size: int
+
+    def __init__(
+        self,
+        model: str = "qwen/qwen3.5-flash-02-23",
+        api_key: Optional[str] = None,
+        base_url: str = "https://openrouter.ai/api/v1",
+        seed: Optional[int] = None,
+        history_size: int = 5,
+    ) -> None:
+        super().__init__(model=model, api_key=api_key, base_url=base_url, seed=seed)
+        self.history_size = history_size
+        self.state_history = []
+
+    def _format_board(self, game: Game2048) -> str:
+        return super()._format_board(game)
+
+    def _format_board_from_grid(self, grid: list[list[int]]) -> str:
+        lines: list[str] = []
+        for row in grid:
+            formatted_row = " ".join(
+                f"{tile:5}" if tile > 0 else "    ." for tile in row
+            )
+            lines.append(formatted_row)
+        return "\n".join(lines)
+
+    def _build_prompt(self, game: Game2048) -> str:
+        board_str = self._format_board(game)
+        valid_moves = game.get_valid_moves()
+
+        history_str = ""
+        if self.state_history:
+            history_lines = []
+            for i, (grid, move, score) in enumerate(self.state_history, 1):
+                history_lines.append(f"Move {i}:")
+                history_lines.append(f"  Board:\n{self._format_board_from_grid(grid)}")
+                history_lines.append(f"  Action: {move}")
+                history_lines.append(f"  Score: {score}")
+                history_lines.append("")
+            history_str = "\n".join(history_lines)
+
+        prompt = f"""You are playing 2048. Your goal is to combine tiles with the same number to reach 2048.
+
+Current board state (4x4 grid):
+{board_str}
+
+Current score: {game.score}
+Valid moves: {", ".join(valid_moves)}
+"""
+
+        if history_str:
+            prompt += f"""
+Recent game history (last {len(self.state_history)} moves):
+{history_str}
+"""
+
+        prompt += """
+Which move should I make next? Respond in JSON format:
+{"move": "up", "reasoning": "brief explanation"}"""
+
+        return prompt
+
+    def choose_move(self, game: Game2048) -> Optional[str]:
+        valid_moves = game.get_valid_moves()
+        if not valid_moves:
+            return None
+
+        prompt = self._build_prompt(game)
+
+        try:
+            start_time = time.perf_counter()
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=100,
+                temperature=0.1,
+            )
+
+            latency = time.perf_counter() - start_time
+
+            response_text = response.choices[0].message.content or ""
+            parsed_move = self._parse_response(response_text, valid_moves)
+
+            input_tokens = response.usage.prompt_tokens if response.usage else 0
+            output_tokens = response.usage.completion_tokens if response.usage else 0
+            cost = self._estimate_cost(input_tokens, output_tokens)
+
+            self.latencies.append(latency)
+            self.costs.append(cost)
+            self.total_latency += latency
+            self.total_cost += cost
+            self.move_count += 1
+
+            if parsed_move:
+                self.state_history.append(
+                    ([row[:] for row in game.grid], parsed_move, game.score)
+                )
+                if len(self.state_history) > self.history_size:
+                    self.state_history = self.state_history[-self.history_size :]
+                return parsed_move
+
+        except Exception:
+            pass
+
+        fallback_move = self.rng.choice(valid_moves)
+        self.state_history.append(
+            ([row[:] for row in game.grid], fallback_move, game.score)
+        )
+        if len(self.state_history) > self.history_size:
+            self.state_history = self.state_history[-self.history_size :]
+        return fallback_move

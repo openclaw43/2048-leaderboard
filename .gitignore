@@ -28,3 +28,4 @@ venv/
 ENV/
 *.pkl
 .training_logs/
+.llm_evaluation_results/
